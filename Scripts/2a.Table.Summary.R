@@ -9,7 +9,7 @@ library(tidyr)
 library(dplyr)
 library(kableExtra)
 
-setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES")
+setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/STP_narwhals")
 options(digits=10)
 
 
@@ -204,24 +204,48 @@ rownames(s1b) = NULL
 s1b$Sex = c("M",rep("F",6),"")
 s1b = s1b %>% relocate("Sex", .before = `Tag type`)
 s1b
-saveRDS(s1b, "TableS1_6ids.rds")
+saveRDS(s1b, "Table1_6ids.rds")
 
 
 
 # export summary table for the new ids compared to HJ et al 2014
 #----------------------------------------------------------------
 webshot::install_phantomjs()
-s1b %>%
-  kbl() %>% 
+s1b = s1b %>% filter(ID != "3965: 2013") # present twice so removed
+s1b$ID[s1b$ID == "7617: 2015"] = "7617"
+s1b$ID[s1b$ID == "7618: 2015"] = "7618"
+s1b$ID[s1b$ID == "Mara: 2014"] = "Mara"
+
+
+# export table
+#--------------
+names(s1b)
+names(s1b)[6]  = "Duration"
+names(s1b)[7]  = "n daily"
+names(s1b)[8]  = "Depths at "
+names(s1b)[10] = "n daily "
+names(s1b)[11] = "Depth at "
+names(s1b)
+
+colNames <- names(s1b)
+dfUnits <- c("","","","","",
+             "(h<sup>-1</sup>)", "drops",
+             "drops (m)","","buzzes",
+             "buzzes (m)")
+
+# export table 1
+#----------------------
+kable(s1b, col.names = dfUnits, escape = F, align = "c",bold=TRUE) %>%
+  add_header_above(header = colNames, line = F, align = "c",bold=TRUE) %>%
   kable_classic(full_width=F, html_font="ArialMT") %>%
   kable_styling(latex_options = c("HOLD_position"),
                 bootstrap_options = c("striped", "hover", "condensed"),
                 position = "center",
+                full_width = T,
                 font_size = 12) %>% 
   row_spec(0, bold=T) %>%
-  kable_styling(full_width = F) 
-  # save_kable("./PAPER/SI/TableS1.pdf", density=400) 
-
+  kable_styling(full_width = F, bootstrap_options = "striped") %>%
+  save_kable("./Table1.png", density=400, zoom = 3) 
 
 
 
@@ -234,7 +258,7 @@ s1b %>%
 
 
 ##########################################
-# Table S2: corrected feeding rate
+# Table 2:  corrected feeding rate
 #           and daily food consumption
 ##########################################
 names(s1b)
@@ -373,18 +397,42 @@ s2
 s2[is.na(s2)] = "-"
 
 
+# rename table column for export
+#----------------------------------
+names(s2)[4]  = "Length"
+names(s2)[5]  = "Body mass"
+names(s2)[6]  = "Feeding rate"
+names(s2)[7]  = "n drops from "
+names(s2)[8]  = "n drops from "
+names(s2)[9]  = "Correction "
+names(s2)[10] = "n drops  "
+names(s2)[11] = "Feeding rate "
+names(s2)[12] = "Food intake"
+names(s2)[13] = "Food consumption"
+names(s2)
+
+# add units
+#---------------
+colNames <- names(s2)
+dfUnits <- c("","","","(cm)","(kg)",
+             "(d<sup>-1</sup>)", "STP",
+             "Acousonde","factor","corrected",
+             "corrected (d<sup>-1</sup>)","(kg.d<sup>-1</sup>)",
+             "(%biomass.d<sup>-1</sup>)")
+
 # export table
 #--------------
-s2 %>%
-  kbl() %>% 
+kable(s2, col.names = dfUnits, escape = F, align = "c",bold=TRUE) %>%
+  add_header_above(header = colNames, line = F, align = "c",bold=TRUE) %>%
   kable_classic(full_width=F, html_font="ArialMT") %>%
   kable_styling(latex_options = c("HOLD_position"),
                 bootstrap_options = c("striped", "hover", "condensed"),
                 position = "center",
+                full_width = T,
                 font_size = 12) %>% 
   row_spec(0, bold=T) %>%
-  kable_styling(full_width = F) %>%
-  save_kable("./PAPER/SI/TableS2.pdf", density=400) 
+  kable_styling(full_width = F, bootstrap_options = "striped") %>%
+  save_kable("./Table2.png", density=400, zoom = 2) 
 
 
 
