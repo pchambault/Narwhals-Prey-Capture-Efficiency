@@ -1,5 +1,5 @@
 ###################################################
-####      SI Table for STP Paper         ##########
+####       SI Tables for STP Paper       ##########
 ##  Chambault et al , Bio Letters, under review ###
 ## by Philippine CHAMBAULT, updated: 3 Nov 2022 ###
 ###################################################
@@ -217,7 +217,7 @@ s1b$ID[s1b$ID == "7618: 2015"] = "7618"
 s1b$ID[s1b$ID == "Mara: 2014"] = "Mara"
 
 
-# export table
+#rename columns
 #--------------
 names(s1b)
 names(s1b)[6]  = "Duration"
@@ -227,6 +227,8 @@ names(s1b)[10] = "n daily "
 names(s1b)[11] = "Depth at "
 names(s1b)
 
+# add column units
+#--------------------
 colNames <- names(s1b)
 dfUnits <- c("","","","","",
              "(h<sup>-1</sup>)", "drops",
@@ -245,7 +247,7 @@ kable(s1b, col.names = dfUnits, escape = F, align = "c",bold=TRUE) %>%
                 font_size = 12) %>% 
   row_spec(0, bold=T) %>%
   kable_styling(full_width = F, bootstrap_options = "striped") %>%
-  save_kable("./Table1.png", density=400, zoom = 3) 
+  save_kable("./TableS1.png", density=400, zoom = 3) 
 
 
 
@@ -432,7 +434,12 @@ kable(s2, col.names = dfUnits, escape = F, align = "c",bold=TRUE) %>%
                 font_size = 12) %>% 
   row_spec(0, bold=T) %>%
   kable_styling(full_width = F, bootstrap_options = "striped") %>%
-  save_kable("./Table2.png", density=400, zoom = 2) 
+  save_kable("./TableS2.png", density=400, zoom = 2) 
+
+
+
+
+
 
 
 
