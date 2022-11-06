@@ -247,7 +247,7 @@ kable(s1b, col.names = dfUnits, escape = F, align = "c",bold=TRUE) %>%
                 font_size = 12) %>% 
   row_spec(0, bold=T) %>%
   kable_styling(full_width = F, bootstrap_options = "striped") %>%
-  save_kable("./TableS1.png", density=400, zoom = 3) 
+  save_kable("./Table1.png", density=400, zoom = 3) 
 
 
 
@@ -434,7 +434,7 @@ kable(s2, col.names = dfUnits, escape = F, align = "c",bold=TRUE) %>%
                 font_size = 12) %>% 
   row_spec(0, bold=T) %>%
   kable_styling(full_width = F, bootstrap_options = "striped") %>%
-  save_kable("./TableS2.png", density=400, zoom = 2) 
+  save_kable("./Table2.png", density=400, zoom = 2) 
 
 
 
