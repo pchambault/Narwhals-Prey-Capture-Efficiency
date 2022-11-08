@@ -20,7 +20,7 @@ setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES")
 
 
 ###################################################################
-# Fig 1: Histo drops depth (from Acousondes)
+# Fig 2: Histo drops depth (from Acousondes)
 ###################################################################
 
 #--------------
@@ -62,7 +62,7 @@ table(stp$id, stp$dive_type)
 
 # import summary table for each id
 #-----------------------------------
-table <- readRDS("./Rdata/TableS1_6ids.rds")
+table <- readRDS("./Rdata/Table1_6ids.rds")
 table
 
 # A data frame with labels for each facet
@@ -86,14 +86,11 @@ drop$id = factor(drop$id, levels = c("3965: 2013","Mara: 2014",
                                      "7618: 2015","7617: 2015"))
 
 # mean drop depth
-mean_drop = stp %>%
+line = stp %>%
   group_by(id) %>%
-  summarize(mean = mean(depth[dive_type=="drop"], na.rm=T))
-line <- data.frame("id" = c("3965: 2013", "Mara: 2014",
-                             "7618: 2015","7617: 2015"),
-                   x = c(mean_drop$mean))
+  summarize(x = mean(depth[dive_type=="drop"], na.rm=T))
 line$id = factor(line$id, levels = c("3965: 2013","Mara: 2014",
-                                       "7618: 2015","7617: 2015"))
+                                     "7618: 2015","7617: 2015"))
 
 a = ggplot(stp[stp$dive_type=="drop",], aes(x = depth)) +
   geom_histogram(colour="black",fill="gray64",
@@ -161,11 +158,9 @@ drop <- data.frame("id" = c("Thora: 2014","Frida: 2015","Eistla: 2016"),
 drop$id = factor(drop$id,
                  levels=c("Thora: 2014","Frida: 2015","Eistla: 2016"))
 
-mean_drop = buzz %>%
+line = buzz %>%
   group_by(id) %>%
-  summarize(mean = mean(depth[drop==1], na.rm=T))
-line <- data.frame("id" = c("Thora: 2014","Frida: 2015","Eistla: 2016"),
-                   x = c(mean_drop$mean))
+  summarize(x = mean(depth[drop==1], na.rm=T))
 line$id = factor(line$id,levels=c("Thora: 2014","Frida: 2015","Eistla: 2016"))
 
 buzz2    = buzz %>% filter(dive_type=="drop")
@@ -205,7 +200,7 @@ b = ggplot(buzz2, aes(x = depth)) +
 
 # grid.arrange(a,b,ncol=1)
 
-ggsave(filename=paste0("./PAPER/S1.pdf"),
+ggsave(filename=paste0("./PAPER/S2.pdf"),
        width=4.5,height=5,units="in",dpi=400,family="ArialMT",
        grid.arrange(a,b,ncol=1)) # width=5,height=2
 
@@ -219,7 +214,7 @@ ggsave(filename=paste0("./PAPER/S1.pdf"),
 
 
 ################################################
-# SI2 Figures: ST magnitude and recovery times
+# SI3 Figures: ST magnitude and recovery times
 ################################################
 
 #---------------------------
@@ -439,7 +434,7 @@ d = ggplot(sum, aes(x = reco)) +
 
 grid.arrange(c,d,ncol=2)
 
-ggsave(filename=paste0("./PAPER/SI/S2.pdf"),
+ggsave(filename=paste0("./S3.pdf"),
        width=5,height=4.5,units="in",dpi=400,family="ArialMT",
        grid.arrange(a,b,c,d,ncol=2)) 
 
