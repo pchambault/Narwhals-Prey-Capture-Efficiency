@@ -1,6 +1,6 @@
 # Narwhals-Prey-Capture-Efficiency
 
-This repository contains code and data necessary to generate the analyses and figures associated with the manuscript entitled "Extremely low seasonal prey capture efficiency in a deep-diving whale, the narwhal" (under review). 
+This repository contains code and data necessary to generate the analyses and figures associated with the manuscript entitled "Extremely low seasonal prey capture efficiency in a deep-diving whale, the narwhal" , published in Biology Letters in 2023. 
 Manuscript authors: Philippine Chambault, Susanna Blackwell, Mads Peter Heide-Jørgensen.
 
 The repository is organised as follows:
