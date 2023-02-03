@@ -8,7 +8,7 @@ The repository is organised as follows:
 - Sub-directory "Scripts": all scripts needed to conduct the analysis, the figures and tables described in the associated Manuscript.
 
 
-The filtered dataset needed to run the scripts will be made available on DRYAD soon. It includes four *.txt files containing the stomach temperature data recorded by both the STP tags (n=7) and the Acousondes (n=3). The files are organised as follow:
+The filtered dataset needed to run the scripts will can be found on DRYAD repository (https://datadryad.org/stash/dataset/doi:10.5061/dryad.15dv41p1f). It includes four *.txt files containing the stomach temperature data recorded by both the STP tags (n=7) and the Acousondes (n=3). The files are organised as follow:
 
 - The high resolution data for each of the 3 narwhals equipped with both an Acousonde and a STP tag (1 file per whale); each file (sampling rate: 1-sec) contains the following columns: date and time, depth (in m), buzz, (0 vs 1) , click (0 vs 1), days (since departure), surf (at the surface or not), raw ST values (in °C), interpolated ST values every second, type (NA, feeding start, drop, feeding end), feeding (feeding vs. no feeding), event (ST drop number);
 
