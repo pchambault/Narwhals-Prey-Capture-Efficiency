@@ -1,0 +1,213 @@
+---
+title: "All STPs"
+author: "Philippine Chambault"
+date: "12/17/2021"
+output:
+  bookdown::html_document2:
+    number_sections: yes
+    code_folding: show
+    df_print: default
+    fig_caption: yes
+    toc: yes
+    toc_float:
+      collapsed: yes
+      smooth_scroll: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo      = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE,
+  # cache   = FALSE,
+  out.width = "100%"
+  # comment = NA
+)
+```
+
+                       
+
+```{r, global_options, include=FALSE}
+library(ggplot2)
+library(tidyquant)
+library(gridExtra)
+library(tidyverse)
+library(dplyr)
+library(viridis)
+library(DT)
+library(data.table)
+Sys.setlocale("LC_TIME", "English")
+```
+
+
+
+# Import data {.tabset}
+
+```{r, echo=TRUE}
+setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES")
+stp  <- readRDS("./Rdata/STP/stp_all_LR_with_type.RDS")
+DT::datatable(stp[1:30,],options=list(scrollX=T))
+stp = data.frame(stp)
+# number of records
+nrow(stp)
+# number of individuals
+length(unique(stp$ptt))
+# number of ST start & end: more starts than end !
+table(stp$type2)
+# range values for STP: removed outliers < 10 and > 38 deg
+summary(stp$stp)
+
+# start and end date for each ID
+dat = stp[,c("ptt","dateTime","stp")] %>%
+    group_by(ptt) %>%
+    summarise(start=head(dateTime,1),
+              end=tail(dateTime,1),
+              nrow=n())
+dat$duration = difftime(dat$end, dat$start,units="days")
+
+# number of records and ST drops/ID
+feed = stp[,c("ptt","dateTime","stp","feed","type2")] %>%
+  group_by(ptt,type2) %>%
+  summarise(STdrop=n())
+feed = feed[feed$type2=="start",]
+dat  = merge(dat, feed[,c("ptt","STdrop")],by="ptt")
+
+# number of daily ST drops/ID
+dat$daily_drop = dat$STdrop / as.numeric(dat$duration)
+dat = dat[order(dat$daily_drop),]
+dat
+```
+
+
+
+# ST profile over time
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="ST profiles over time."}
+ggplot(stp[!is.na(stp$stp),], aes(x=dateTime, y=stp)) +
+  geom_point(size=0.2) + 
+  geom_point(data=stp[stp$type2=="start",], colour="red",shape=15) +
+  geom_path() +
+  labs(x="", y="STP (degrees)") +
+  facet_wrap(~ptt, scales="free_x") +
+  theme_tq()
+```
+
+
+
+# Depth profile over time
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profiles over time."}
+ggplot(stp[!is.na(stp$stp),], aes(x=dateTime, y=-depth)) +
+  geom_point(aes(colour=stp)) + 
+  labs(x="", y="Depth (m)") +
+  facet_wrap(~ptt, scales="free") +
+  scale_color_viridis() +
+  theme_tq()
+```
+
+# Depth profile according to ST
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profiles according to ST."}
+ggplot(stp[!is.na(stp$depth),], aes(x=stp, y=-depth, colour=ptt)) +
+  geom_point() + 
+  labs(x="ST (deg)", y="Depth (m)") +
+  # geom_smooth(method="gam", aes(colour=ptt)) +
+  scale_colour_tq() +
+  theme_tq()
+```
+
+
+# STP duration
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profiles over time."}
+ggplot(stp[!is.na(stp$stp),], aes(y=days, x=ptt, colour=ptt)) +
+  geom_line(size=2) + 
+  scale_y_continuous(name="Days", breaks=seq(1,max(stp$days,by=1))) +
+  scale_color_tq() +
+  coord_flip() +
+  theme_tq() +
+  theme(legend.position="none")
+```
+
+
+# Number of ST drops per individual
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histogram of the number of ST drops per individual."}
+ggplot(dat, aes(y=STdrop, x=reorder(ptt,STdrop), fill=ptt)) +
+  geom_bar(stat="identity") + # , position=position_dodge()
+  labs(x="ID", y="Number of ST drops") +
+  geom_text(aes(label=dat$STdrop), vjust=0, size=4) +
+  scale_fill_tq() +
+  theme_tq() +
+  theme(legend.position="none")
+```
+
+
+
+# Number of daily ST drops per individual
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histogram of the number of daily ST drops per individual."}
+ggplot(dat, aes(y=daily_drop, x=reorder(ptt,daily_drop), fill=ptt)) +
+  geom_bar(stat="identity") + # , position=position_dodge()
+  labs(x="ID", y="Number of daily ST drops") +
+  geom_text(aes(label=round(dat$daily_drop)), vjust=0, size=4) +
+  scale_fill_tq() +
+  theme_tq() +
+  theme(legend.position="none")
+```
+
+
+
+
+# Boxplot of ST during feeding vs no feeding
+
+```{r, echo=TRUE}
+stp$feed = factor(stp$feed, levels=c("no feeding","feeding"))
+
+# average ST during feeding and no feeding
+stp %>%
+  group_by(ptt,feed) %>%
+  summarize(mean=mean(stp,na.rm=T),
+            sd=sd(stp,na.rm=T))
+# kruskal Wallis test between feeding and no feeding
+kruskal.test(stp$stp, stp$feed)
+
+# number of ST events / ID
+stp %>%
+  group_by(ptt) %>%
+  summarise(counts_nofeed=table(feed)[1],
+            counts_feed=table(feed)[2])
+
+# number of start and end / ID
+stp %>%
+  group_by(ptt) %>%
+  summarise(counts_start=table(type2)[4],
+            counts_end=table(type2)[1])
+```
+Something is wrong with the detection of feeding end; always less ends than starts.
+
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histogram of the number of daily ST drops per individual."}
+ggplot(stp, aes(y=stp, x=ptt, fill=feed)) +
+  geom_boxplot() +  
+  labs(x="ID", y="STP (deg)") +
+  scale_fill_tq() +
+  theme_tq() 
+```
+
+Lots of outliers for Frida, 7618-15 and Thora.
+
+
+
+
+# Boxplot of depth during ST drops
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histogram of the number of daily ST drops per individual."}
+ggplot(stp[!is.na(stp$depth),], aes(y=-depth, x=ptt, fill=ptt)) +
+  geom_boxplot() + 
+  labs(x="ID", y="STP (deg)") +
+  scale_fill_tq() +
+  theme_tq()  +
+  theme(legend.position="none")
+```

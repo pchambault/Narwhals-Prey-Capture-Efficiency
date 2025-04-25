@@ -1,0 +1,503 @@
+---
+title: "Visual match acousonde-STP for Frida (after clenaing start and end)"
+author: "Philippine CHAMBAULT"
+date: "21/12/2021"
+output:
+  bookdown::html_document2:
+    number_sections: yes
+    code_folding: show
+    df_print: default
+    fig_caption: yes
+    toc: yes
+    toc_float:
+      collapsed: yes
+      smooth_scroll: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo      = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE,
+  # cache   = FALSE,
+  out.width = "100%"
+  # comment = NA
+)
+```
+
+                       
+
+```{r, global_options, include=FALSE}
+library(ggplot2)
+library(gridExtra)
+library(tidyverse)
+library(dplyr)
+library(viridis)
+library(DT)
+library(data.table)
+library(tidyquant)
+Sys.setlocale("LC_TIME", "English")
+```
+
+
+
+
+
+# Import data {.tabset}
+
+## STP 
+```{r, echo=TRUE}
+stp <- readRDS("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/Rdata/STP/3.STP_events_clean_6ids.rds")
+stp = stp[stp$ptt=="3965-Frida",]
+DT::datatable(stp[1:30,],options=list(scrollX=T))
+
+# Duration of the STP
+round(difftime(stp$dateTime[nrow(stp)], stp$dateTime[1], units="days")) 
+```
+
+## Acousonde
+```{r, echo=TRUE}
+buzz <- readRDS("./Rdata/Acou_calib/buzz_Eistla_FRida_Thora_phases_2m.RDS")
+buzz = buzz[buzz$id=="Frida",]
+buzz = DT::datatable(buzz[1:100,],options=list(scrollX=T)) 
+
+# Time elapsed (in days) between release and first buzz:
+round(difftime(buzz$dateTime[buzz$buzz==1][[1]], 
+               buzz$dateTime[1], units="hours"))
+
+# Duration of the acousonde
+round(difftime(buzz$dateTime[nrow(buzz)], buzz$dateTime[1], units="days")) 
+
+# Proportion of phases identified using the diveMove package
+table(buzz$phase) / nrow(buzz) * 100
+```
+
+
+
+# STP over time {.tabset}
+
+## All data included
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Stomach temperature over time and according to event type."}
+ggplot(stp, aes(x=dateTime, y=stp)) +
+  geom_path(size=0.2,shape=19) +
+  geom_point(size=1.5, aes(colour=type)) +
+  labs(x="", y="STP (degrees)",title="Frida") +
+  theme_tq()
+```
+
+
+
+
+
+# Correlation between STP and Acousonde after removing outliers
+
+```{r, echo=FALSE}
+merge <- merge <- readRDS("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/Rdata/merge_depth_STP_Acousonde_Frida.RDS")
+summary(merge$stp)
+cor.test(merge$depth.y, merge$depth.x)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Correlation between depth recorded from STP and the ones from the Acousonde from Frida before removing outliers."}
+ggplot(merge, aes(depth.x, depth.y)) +
+  labs(x="Depth from STP (m)",y="Depth from Acousonde (m)",title="Frida") +
+  geom_smooth(method=lm,size=0.6) +
+  geom_point(size=1, colour="brown") + 
+  theme_tq()
+```
+
+
+
+
+
+
+
+
+
+
+# Match between buzzes and ST drop {.tabset}
+
+## 16 August 04:30
+
+```{r, echo=FALSE}
+st = setDT(merge)[dateTime %between% c('2015-08-16 04:30:00', 
+                                     '2015-08-16 09:00:00')]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profile on 16th August at 04:30 from the acousonde (buz in red, ST start in blue) and ST recorded by the STP (bottom)."}
+p1 = ggplot(st[!is.na(st$stp),], aes(dateTime, -depth.x)) +
+  geom_path(size=0.1) + 
+  geom_point(data=st[st$buzz==1,], size=1.5,colour="red",shape=15) +
+  geom_point(size=2, data=st[st$type2=="start",], 
+             aes(y=-depth.x, x=dateTime), colour="blue") + 
+  labs(x="", y="Depth (m)",title="Buzzes (red) / STP start (blue)") +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq() +
+  theme(axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black")) 
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.1) + 
+  # ylim(20,38) +
+  geom_point(size=0.2, colour="black") +
+  geom_point(size=2, data=st[st$type2=="start",], colour="blue", shape=15) +
+  geom_point(size=2, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (degrees)",title="ST (start in blue, end in orange)") +
+  theme_tq() +
+  theme(legend.text=element_text(size=10),
+        legend.position="bottom",
+        axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black"),
+        legend.title = element_blank())
+grid.arrange(p1,p2)
+```
+
+
+## 16 August 19:30
+
+```{r, echo=FALSE}
+st = setDT(merge)[dateTime %between% c('2015-08-16 19:30:00', 
+                                     '2015-08-16 23:00:00')]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profile on 16th August at 19:30 from the acousonde (buz in red, ST  start in blue) and ST recorded by the STP (bottom)."}
+p1 = ggplot(st[!is.na(st$stp),], aes(dateTime, -depth.x)) +
+  geom_path(size=0.1) + 
+  geom_point(data=st[st$buzz==1,], size=1.5,colour="red",shape=15) +
+  geom_point(size=2, data=st[st$type2=="start",], 
+             aes(y=-depth.x, x=dateTime), colour="blue") + 
+  labs(x="", y="Depth (m)",title="Buzzes (red) / STP start (blue)") +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq() +
+  theme(axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black")) 
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.1) + 
+  ylim(20,38) +
+  geom_point(size=0.2, colour="black") +
+  geom_point(size=2, data=st[st$type2=="start",], colour="blue", shape=15) +
+  geom_point(size=2, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (degrees)",title="ST (start in blue, end in orange)") +
+  theme_tq() +
+  theme(legend.text=element_text(size=10),
+        legend.position="bottom",
+        axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black"),
+        legend.title = element_blank())
+grid.arrange(p1,p2)
+```
+
+A feeding start during a dive without buzzes, but no end. Need to fix that!
+
+
+
+## 17 August 01:00
+
+```{r, echo=FALSE}
+st = setDT(merge)[dateTime %between% c('2015-08-17 01:00:00', 
+                                     '2015-08-17 03:00:00')]
+table(st$type2)  # number of feeding events
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profile on 17th August at 01:00 from the acousonde (buzz in red, ST start in blue) and ST recorded by the STP (bottom)."}
+p1 = ggplot(st[!is.na(st$stp),], aes(dateTime, -depth.x)) +
+  geom_path(size=0.1) + 
+  geom_point(data=st[st$buzz==1,], size=1.5,colour="red",shape=15) +
+  geom_point(size=2, data=st[st$type2=="start",], 
+             aes(y=-depth.x, x=dateTime), colour="blue") + 
+  labs(x="", y="Depth (m)",title="Buzzes (red) / STP start (blue)") +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq() +
+  theme(axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black")) 
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.1) + 
+  ylim(25,38) +
+  geom_point(size=0.2, colour="black") +
+  geom_point(size=2, data=st[st$type2=="start",], colour="blue", shape=15) +
+  geom_point(size=2, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (degrees)",title="ST (start in blue, end in orange)") +
+  theme_tq() +
+  theme(legend.text=element_text(size=10),
+        legend.position="bottom",
+        axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black"),
+        legend.title = element_blank())
+grid.arrange(p1,p2)
+```
+
+
+
+## 17 August 04:10
+
+```{r, echo=FALSE}
+st = setDT(merge)[dateTime %between% c('2015-08-17 04:00:00', 
+                                     '2015-08-17 06:00:00')]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profile on 17th August at 01:28 from the acousonde (buzz in red, ST start in blue) and ST recorded by the STP (bottom)."}
+p1 = ggplot(st[!is.na(st$stp),], aes(dateTime, -depth.x)) +
+  geom_path(size=0.1) + 
+  geom_point(data=st[st$buzz==1,], size=1.5,colour="red",shape=15) +
+  geom_point(size=2, data=st[st$type2=="start",], 
+             aes(y=-depth.x, x=dateTime), colour="blue") + 
+  labs(x="", y="Depth (m)",title="Buzzes (red) / STP start (blue)") +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq() +
+  theme(axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black")) 
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.1) + 
+  ylim(20,38) +
+  geom_point(size=0.2, colour="black") +
+  geom_point(size=2, data=st[st$type2=="start",], colour="blue", shape=15) +
+  geom_point(size=2, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (degrees)",title="ST (start in blue, end in orange)") +
+  theme_tq() +
+  theme(legend.text=element_text(size=10),
+        legend.position="bottom",
+        axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black"),
+        legend.title = element_blank())
+grid.arrange(p1,p2)
+```
+
+
+## 17 August 05:30
+
+```{r, echo=FALSE}
+st = setDT(merge)[dateTime %between% c('2015-08-17 05:25:00', 
+                                     '2015-08-17 07:30:00')]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profile on 16th August at 16:30 from the acousonde (buz in red, ST start in blue) and ST recorded by the STP (bottom)."}
+p1 = ggplot(st[!is.na(st$stp),], aes(dateTime, -depth.x)) +
+  geom_path(size=0.1) + 
+  geom_point(data=st[st$buzz==1,], size=1.5,colour="red",shape=15) +
+  geom_point(size=2, data=st[st$type2=="start",], 
+             aes(y=-depth.x, x=dateTime), colour="blue") + 
+  labs(x="", y="Depth (m)",title="Buzzes (red) / STP start (blue)") +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq() +
+  theme(axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black")) 
+  
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.1) + 
+  ylim(20,38) +
+  geom_point(size=0.2, colour="black") +
+  geom_point(size=2, data=st[st$type2=="start",], colour="blue", shape=15) +
+  geom_point(size=2, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (degrees)",title="ST (start in blue, end in orange)") +
+  theme_tq() +
+  theme(legend.text=element_text(size=10),
+        legend.position="bottom",
+        axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black"),
+        legend.title = element_blank())
+grid.arrange(p1,p2)
+```
+
+
+## 17 August 11:25
+
+```{r, echo=FALSE}
+st = setDT(merge)[dateTime %between% c('2015-08-17 11:25:00', 
+                                     '2015-08-17 13:30:00')]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profile on 17th August at 11:25 from the acousonde (buz in red, ST start in blue) and ST recorded by the STP (bottom)."}
+p1 = ggplot(st[!is.na(st$stp),], aes(dateTime, -depth.x)) +
+  geom_path(size=0.1) + 
+  geom_point(data=st[st$buzz==1,], size=1.5,colour="red",shape=15) +
+  geom_point(size=2, data=st[st$type2=="start",], 
+             aes(y=-depth.x, x=dateTime), colour="blue") + 
+  labs(x="", y="Depth (m)",title="Buzzes (red) / STP start (blue)") +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq() +
+  theme(axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black")) 
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.1) + 
+  ylim(20,38) +
+  geom_point(size=0.2, colour="black") +
+  geom_point(size=2, data=st[st$type2=="start",], colour="blue", shape=15) +
+  geom_point(size=2, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (degrees)",title="ST (start in blue, end in orange)") +
+  theme_tq() +
+  theme(legend.text=element_text(size=10),
+        legend.position="bottom",
+        axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black"),
+        legend.title = element_blank())
+grid.arrange(p1,p2)
+```
+
+
+
+
+## 17 August 14:20
+
+```{r, echo=FALSE}
+st = setDT(merge)[dateTime %between% c('2015-08-17 14:20:00', 
+                                     '2015-08-17 16:30:00')]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profile on 17th August at 01:28 from the acousonde (buz in red, ST start in blue) and ST recorded by the STP (bottom)."}
+p1 = ggplot(st[!is.na(st$stp),], aes(dateTime, -depth.x)) +
+  geom_path(size=0.1) + 
+  geom_point(data=st[st$buzz==1,], size=1.5,colour="red",shape=15) +
+  geom_point(size=2, data=st[st$type2=="start",], 
+             aes(y=-depth.x, x=dateTime), colour="blue") + 
+  labs(x="", y="Depth (m)",title="Buzzes (red) / STP start (blue)") +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq() +
+  theme(axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black")) 
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.1) + 
+  ylim(30,38) +
+  geom_point(size=0.2, colour="black") +
+  geom_point(size=2, data=st[st$type2=="start",], colour="blue", shape=15) +
+  geom_point(size=2, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (degrees)",title="ST (start in blue, end in orange)") +
+  theme_tq() +
+  theme(legend.text=element_text(size=10),
+        legend.position="bottom",
+        axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black"),
+        legend.title = element_blank())
+grid.arrange(p1,p2)
+```
+
+
+
+## 17 August 16:30
+
+```{r, echo=FALSE}
+st = setDT(merge)[dateTime %between% c('2015-08-17 16:30:00', 
+                                     '2015-08-17 17:40:00')]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profile on 17th August at 16:30 from the acousonde (buz in red, ST start in blue) and ST recorded by the STP (bottom)."}
+p1 = ggplot(st[!is.na(st$stp),], aes(dateTime, -depth.x)) +
+  geom_path(size=0.1) + 
+  geom_point(data=st[st$buzz==1,], size=1.5,colour="red",shape=15) +
+  geom_point(size=2, data=st[st$type2=="start",], 
+             aes(y=-depth.x, x=dateTime), colour="blue") + 
+  labs(x="", y="Depth (m)",title="Buzzes (red) / STP start (blue)") +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq() +
+  theme(axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black")) 
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.1) + 
+  # ylim(19,30) +
+  geom_point(size=0.2, colour="black") +
+  geom_point(size=2, data=st[st$type2=="start",], colour="blue", shape=15) +
+  geom_point(size=2, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (degrees)",title="ST (start in blue, end in orange)") +
+  theme_tq() +
+  theme(legend.text=element_text(size=10),
+        legend.position="bottom",
+        axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black"),
+        legend.title = element_blank())
+grid.arrange(p1,p2)
+```
+
+
+## 18 August 01:30
+
+```{r, echo=FALSE}
+st = setDT(merge)[dateTime %between% c('2015-08-18 01:30:00', 
+                                     '2015-08-18 03:10:00')]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profile on 18th August at 01:30 from the acousonde (buz in red, ST start in blue) and ST recorded by the STP (bottom)."}
+p1 = ggplot(st[!is.na(st$stp),], aes(dateTime, -depth.x)) +
+  geom_path(size=0.1) + 
+  geom_point(data=st[st$buzz==1,], size=1.5,colour="red",shape=15) +
+  geom_point(size=2, data=st[st$type2=="start",], 
+             aes(y=-depth.x, x=dateTime), colour="blue") + 
+  labs(x="", y="Depth (m)",title="Buzzes (red) / STP start (blue)") +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq() +
+  theme(axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black")) 
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.1) + 
+  ylim(19,38) +
+  geom_point(size=0.2, colour="black") +
+  geom_point(size=2, data=st[st$type2=="start",], colour="blue", shape=15) +
+  geom_point(size=2, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (degrees)",title="ST (start in blue, end in orange)") +
+  theme_tq() +
+  theme(legend.text=element_text(size=10),
+        legend.position="bottom",
+        axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black"), 
+        legend.title = element_blank())
+grid.arrange(p1,p2)
+```
+
+
+
+
+
+## 19 August 02:30
+
+```{r, echo=FALSE}
+st = setDT(merge)[dateTime %between% c('2015-08-19 02:30:00', 
+                                     '2015-08-19 05:30:00')]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profile on 19th August at 02:30 from the acousonde (buz in red, ST start in blue) and ST recorded by the STP (bottom)."}
+p1 = ggplot(st[!is.na(st$stp),], aes(dateTime, -depth.x)) +
+  geom_path(size=0.1) + 
+  geom_point(data=st[st$buzz==1,], size=1.5,colour="red",shape=15) +
+  geom_point(size=2, data=st[st$type2=="start",], 
+             aes(y=-depth.x, x=dateTime), colour="blue") + 
+  labs(x="", y="Depth (m)",title="Buzzes (red) / STP start (blue)") +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq() +
+  theme(axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black")) 
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.1) + 
+  ylim(19,38) +
+  geom_point(size=0.2, colour="black") +
+  geom_point(size=2, data=st[st$type2=="start",], colour="blue", shape=15) +
+  geom_point(size=2, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (degrees)",title="ST (start in blue, end in orange)") +
+  theme_tq() +
+  theme(legend.text=element_text(size=10),
+        legend.position="bottom",
+        axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black"), 
+        legend.title = element_blank())
+grid.arrange(p1,p2)
+```
+
+
+## 19 August 02:30
+
+```{r, echo=FALSE}
+st = setDT(merge)[dateTime %between% c('2015-08-19 02:30:00', 
+                                       '2015-08-19 05:30:00')]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profile on 19th August at 02:30 from the acousonde (buz in red, ST start in blue) and ST recorded by the STP (bottom)."}
+p1 = ggplot(st[!is.na(st$stp),], aes(dateTime, -depth.x)) +
+  geom_path(size=0.1) + 
+  geom_point(data=st[st$buzz==1,], size=1.5,colour="red",shape=15) +
+  geom_point(size=2, data=st[st$type2=="start",], 
+             aes(y=-depth.x, x=dateTime), colour="blue") + 
+  labs(x="", y="Depth (m)",title="Buzzes (red) / STP start (blue)") +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq()+
+  theme(axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black")) 
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.1) + 
+  ylim(19,38) +
+  geom_point(size=0.2, colour="black") +
+  geom_point(size=2, data=st[st$type2=="start",], colour="blue", shape=15) +
+  geom_point(size=2, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (degrees)",title="ST (start in blue, end in orange)") +
+  theme_tq() +
+  theme(legend.text=element_text(size=10),
+        legend.position="bottom",
+        axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black"),
+        legend.title = element_blank())
+grid.arrange(p1,p2)
+```

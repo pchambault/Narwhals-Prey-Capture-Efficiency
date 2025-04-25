@@ -1,0 +1,525 @@
+---
+title: "Visual match acousonde-STP for Mara"
+author: "Philippine CHAMBAULT"
+date: "28/12/2021"
+output:
+  bookdown::html_document2:
+    number_sections: yes
+    code_folding: show
+    df_print: default
+    fig_caption: yes
+    toc: yes
+    toc_float:
+      collapsed: yes
+      smooth_scroll: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo      = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE,
+  # cache   = FALSE,
+  out.width = "100%"
+  # comment = NA
+)
+```
+
+                       
+
+```{r, global_options, include=FALSE}
+library(ggplot2)
+library(gridExtra)
+library(tidyverse)
+library(dplyr)
+library(viridis)
+library(DT)
+library(data.table)
+Sys.setlocale("LC_TIME", "English")
+```
+
+
+
+
+
+# Import data {.tabset}
+
+## STP 
+```{r, echo=TRUE}
+stp  <- readRDS("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/Rdata/STP/3.STP_clean_7ids.RDS")
+stp = data.frame(stp)
+stp = stp[stp$ptt=="7618-Mara",]
+DT::datatable(stp[1:30,],options=list(scrollX=T))
+table(stp$typ2)
+
+# Duration of the STP
+round(difftime(stp$dateTime[nrow(stp)], stp$dateTime[1], units="days")) 
+```
+
+## Acousonde
+```{r, echo=TRUE}
+buzz <- readRDS("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/Rdata/Acou_calib/buzz_Eistla_Frida_Thora_Mara_phases_2m.RDS")
+buzz = data.frame(buzz)
+buzz = buzz[buzz$id=="Mara",]
+DT::datatable(buzz[1:100,],options=list(scrollX=T)) 
+
+# Time elapsed (in days) between release and first buzz:
+round(difftime(buzz$dateTime[buzz$buzz==1][[1]], 
+               buzz$dateTime[1], units="hours"))
+
+# Duration of the acousonde
+round(difftime(buzz$dateTime[nrow(buzz)], buzz$dateTime[1], units="days")) 
+
+# Proportion of phases identified using the diveMove package
+table(buzz$phase) / nrow(buzz) * 100
+```
+
+
+
+# STP over time {.tabset}
+
+## All data included
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Stomach temperature over time and according to event type."}
+ggplot(stp, aes(x=dateTime, y=stp)) +
+  geom_path(size=0.2,shape=19) +
+  geom_point(size=1) +
+  geom_point(data=stp[stp$type2=="start",], colour="red",shape=15,size=1) +
+        # geom_point(data=stp[stp$type2=="end",], colour="orange",shape=15,size=1) +
+  labs(x="", y="STP (degrees)",title="Mara") +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.title = element_blank(),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm")) 
+```
+Some potential outliers below 10 degrees. Let's remove them and see what the curve looks like.
+
+## Without outliers
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Stomach temperature over time after discarding outliers above 40 and below 10 degrees."}
+ggplot(stp[!(stp$stp>40 | stp$stp<10 | is.na(stp$stp)),], aes(x=dateTime, y=stp)) +
+  geom_path(size=0.2,shape=19) +
+  geom_point(size=1) +
+  geom_point(data=stp[stp$type2=="start",], colour="red",shape=15,size=1) +
+  labs(x="", y="STP (degrees)",title="Mara") +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.title = element_blank(),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm")) 
+```
+
+
+
+
+# Temporal overlap
+
+```{r, echo=TRUE}
+buzz$type  = "Acousonde"
+stp$type   = "STP"
+stp = data.frame(stp)
+dat = rbind(buzz[,c("dateTime","type")], 
+            stp[!is.na(stp$depth),c("dateTime","type")])
+dat$type = as.factor(dat$type)
+buzz = data.frame(buzz)
+b = buzz[buzz$buzz==1,]
+
+# temporal overlap between STP and buzzes
+round(difftime(buzz$dateTime[nrow(buzz)], 
+               buzz$dateTime[buzz$buzz==1][[1]], units="hours")) 
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Temporal overlap between the STP and the acousonde. Red dots refer to buzzes."}
+ggplot(dat, aes(y=dateTime, x=type)) +
+  geom_point(size=1.5,colour="black",shape=19) +
+  geom_point(data=b,size=1.5,colour="red",shape=19) +
+  labs(x="", y="Time",title="Mara") +
+  coord_flip() +
+  geom_hline(aes(yintercept=as.numeric(b$dateTime[1])), 
+             color="blue",linetype=4) +
+  geom_hline(aes(yintercept=as.numeric(b$dateTime[nrow(b)])), 
+             color="blue",linetype=4) +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.title = element_blank(),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm")) 
+```
+Only 1 hour of overlap between the acousonde when buzzes and the STP.
+
+
+
+
+
+
+# Correlation between STP and Acousonde {.tabset}
+
+## Before removing outliers
+```{r, echo=FALSE}
+merge <- readRDS("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/Rdata/merge_depth_STP_Acousonde_Mara.RDS")
+summary(merge$stp)
+cor.test(merge$depth.y, merge$depth.x)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Correlation between depth recorded from STP and the ones from the Acousonde from Mara before removing outliers."}
+ggplot(merge, aes(depth.x, depth.y)) +
+  labs(x="Depth from STP (m)",y="Depth from Acousonde (m)",title="Mara") +
+  geom_smooth(method=lm,size=0.6) +
+  geom_point(size=1, colour="brown") + 
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.title = element_blank(),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm")) 
+```
+
+## After removing outliers
+
+```{r, echo=FALSE}
+merge = merge[!(merge$stp<10 | merge$stp>40),]
+summary(merge$stp)
+cor.test(merge$depth.y, merge$depth.x)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Correlation between depth recorded from STP and the ones from the Acousonde from Mara after removing outliers."}
+ggplot(merge, aes(depth.x, depth.y)) +
+  labs(x="Depth from STP (m)",y="Depth from Acousonde (m)",title="Mara") +
+  geom_smooth(method=lm,size=0.6) +
+  geom_point(size=1, colour="brown") + 
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.title = element_blank(),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm")) 
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Match between buzzes and ST drop {.tabset}
+
+## 11 August 16:30
+
+```{r, echo=FALSE}
+acou = setDT(buzz)[dateTime %between% c('2014-08-11 16:00:00',
+                                        '2014-08-11 17:00:00')]
+st = setDT(stp)[dateTime %between% c('2014-08-11 16:00:00', 
+                                     '2014-08-11 17:00:00')]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profile from the acousonde (buzz in green, ST start in red, ST end in orange) and ST recorded by the STP (bottom)."}
+p1 = ggplot(acou, aes(dateTime, -depth)) +
+  geom_path(size=0.1) + 
+  geom_point(data=acou[acou$buzz==1,], size=1.5,colour="green",shape=17) +
+  geom_point(size=2, data=st, aes(y=-depth, x=dateTime), colour="red", pch=15) + 
+  labs(x="", y="Depth (m)",title="Buzzes (green) / STP records (red)") +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,hjust=0.5,angle=90,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.title = element_blank(),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm")) 
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.1) + 
+  # ylim(30,38) +
+  geom_point(size=1, aes(y=stp, x=dateTime)) + 
+  geom_point(data=st[st$type2=="start",], colour="red",shape=15,size=3) +
+  geom_point(data=st[st$type2=="end",], colour="orange",shape=15,size=3) +
+  labs(x="", y="STP (degrees)",title="STP") +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.position="bottom",
+        legend.title = element_blank(),
+        legend.key.height = unit(0.2, 'cm'), #change legend key height
+        legend.key.width = unit(0.2, 'cm'), #change legend key width
+        legend.key = element_rect(fill = "transparent", colour = "transparent"),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm")) 
+
+grid.arrange(p1,p2)
+```
+
+
+
+
+
+
+
+## 11 August 17:30
+
+```{r, echo=FALSE}
+acou = setDT(buzz)[dateTime %between% c('2014-08-11 17:30:00',
+                                        '2014-08-11 19:00:00')]
+st = setDT(stp)[dateTime %between% c('2014-08-11 17:30:00', 
+                                     '2014-08-11 19:00:00')]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profile from the acousonde (buzz in green, ST start in red, ST end in orange) and ST recorded by the STP (bottom)."}
+p1 = ggplot(acou, aes(dateTime, -depth)) +
+  geom_path(size=0.1) + 
+  geom_point(data=acou[acou$buzz==1,], size=1.5,colour="green",shape=17) +
+  geom_point(size=2, data=st, aes(y=-depth, x=dateTime), colour="red", pch=15) + 
+  labs(x="", y="Depth (m)",title="Buzzes (green) / STP records (red)") +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,hjust=0.5,angle=90,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.title = element_blank(),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm")) 
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.1) + 
+  # ylim(30,38) +
+  geom_point(size=1, aes(y=stp, x=dateTime)) + 
+  geom_point(data=st[st$type2=="start",], colour="red",shape=15,size=3) +
+  geom_point(data=st[st$type2=="end",], colour="orange",shape=15,size=3) +
+  labs(x="", y="STP (degrees)",title="STP") +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.position="bottom",
+        legend.title = element_blank(),
+        legend.key.height = unit(0.2, 'cm'), #change legend key height
+        legend.key.width = unit(0.2, 'cm'), #change legend key width
+        legend.key = element_rect(fill = "transparent", colour = "transparent"),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm")) 
+
+grid.arrange(p1,p2)
+```
+
+
+
+## 11 August 20:00
+
+```{r, echo=FALSE}
+acou = setDT(buzz)[dateTime %between% c('2014-08-11 20:30:00',
+                                        '2014-08-11 21:30:00')]
+st = setDT(stp)[dateTime %between% c('2014-08-11 20:30:00', 
+                                     '2014-08-11 21:30:00')]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profile from the acousonde (buzz in green, ST start in red, ST end in orange) and ST recorded by the STP (bottom)."}
+p1 = ggplot(acou, aes(dateTime, -depth)) +
+  geom_path(size=0.1) + 
+  geom_point(data=acou[acou$buzz==1,], size=1.5,colour="green",shape=17) +
+  geom_point(size=2, data=st, aes(y=-depth, x=dateTime), colour="red", pch=15) + 
+  labs(x="", y="Depth (m)",title="Buzzes (green) / STP records (red)") +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,hjust=0.5,angle=90,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.title = element_blank(),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm")) 
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.1) + 
+  # ylim(30,38) +
+  geom_point(size=1, aes(y=stp, x=dateTime)) + 
+  geom_point(data=st[st$type2=="start",], colour="red",shape=15,size=3) +
+  geom_point(data=st[st$type2=="end",], colour="orange",shape=15,size=3) +
+  labs(x="", y="STP (degrees)",title="STP") +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.position="bottom",
+        legend.title = element_blank(),
+        legend.key.height = unit(0.2, 'cm'), #change legend key height
+        legend.key.width = unit(0.2, 'cm'), #change legend key width
+        legend.key = element_rect(fill = "transparent", colour = "transparent"),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm")) 
+
+grid.arrange(p1,p2)
+```
+
+
+## 12 August 00:40
+
+```{r, echo=FALSE}
+buzz = data.frame(buzz)
+head(buzz[buzz$buzz==1,])
+acou = setDT(buzz)[dateTime %between% c('2014-08-12 00:40:00',
+                                        '2014-08-12 02:30:00')]
+st = setDT(stp)[dateTime %between% c('2014-08-12 00:40:00', 
+                                     '2014-08-12 02:30:00')]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profile from the acousonde (buzz in green, ST start in red, ST end in orange) and ST recorded by the STP (bottom)."}
+p1 = ggplot(acou, aes(dateTime, -depth)) +
+  geom_path(size=0.1) + 
+  geom_point(data=acou[acou$buzz==1,], size=1.5,colour="green",shape=17) +
+  geom_point(size=2, data=st, aes(y=-depth, x=dateTime), colour="red", pch=15) + 
+  labs(x="", y="Depth (m)",title="Buzzes (green) / STP records (red)") +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,hjust=0.5,angle=90,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.title = element_blank(),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm")) 
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.1) + 
+  # ylim(30,38) +
+  geom_point(size=1, aes(y=stp, x=dateTime)) + 
+  geom_point(data=st[st$type2=="start",], colour="red",shape=15,size=3) +
+  geom_point(data=st[st$type2=="end",], colour="orange",shape=15,size=3) +
+  labs(x="", y="STP (degrees)",title="STP") +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.position="bottom",
+        legend.title = element_blank(),
+        legend.key.height = unit(0.2, 'cm'), #change legend key height
+        legend.key.width = unit(0.2, 'cm'), #change legend key width
+        legend.key = element_rect(fill = "transparent", colour = "transparent"),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm")) 
+
+grid.arrange(p1,p2)
+```
+
+
+
+## 12 August 04:30
+
+```{r, echo=FALSE}
+acou = setDT(buzz)[dateTime %between% c('2014-08-12 05:20:00',
+                                        '2014-08-12 06:30:00')]
+st = setDT(stp)[dateTime %between% c('2014-08-12 04:20:00', 
+                                     '2014-08-12 06:30:00')]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profile from the acousonde (buzz in green, ST start in red, ST end in orange) and ST recorded by the STP (bottom)."}
+p1 = ggplot(acou, aes(dateTime, -depth)) +
+  geom_path(size=0.1) + 
+  geom_point(data=acou[acou$buzz==1,], size=1.5,colour="green",shape=17) +
+  geom_point(size=2, data=st, aes(y=-depth, x=dateTime), colour="red", pch=15) + 
+  labs(x="", y="Depth (m)",title="Buzzes (green) / STP records (red)") +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,hjust=0.5,angle=90,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.title = element_blank(),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm")) 
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.1) + 
+  # ylim(30,38) +
+  geom_point(size=1, aes(y=stp, x=dateTime)) + 
+  geom_point(data=st[st$type2=="start",], colour="red",shape=15,size=3) +
+  geom_point(data=st[st$type2=="end",], colour="orange",shape=15,size=3) +
+  labs(x="", y="STP (degrees)",title="STP") +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.position="bottom",
+        legend.title = element_blank(),
+        legend.key.height = unit(0.2, 'cm'), #change legend key height
+        legend.key.width = unit(0.2, 'cm'), #change legend key width
+        legend.key = element_rect(fill = "transparent", colour = "transparent"),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm")) 
+
+grid.arrange(p1,p2)
+```
+
+No acousonde anymore!!

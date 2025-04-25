@@ -1,0 +1,793 @@
+---
+title: "Merge HR to LR (#3965)"
+author: "Philippine CHAMBAULT"
+date: "18/12/2021"
+output:
+  bookdown::html_document2:
+    number_sections: yes
+    code_folding: show
+    df_print: default
+    fig_caption: yes
+    toc: yes
+    toc_float:
+      collapsed: yes
+      smooth_scroll: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo      = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE,
+  # cache   = FALSE,
+  out.width = "100%"
+  # comment = NA
+)
+```
+
+                       
+
+```{r, global_options, include=FALSE}
+library(ggplot2)
+library(tidyquant)
+library(gridExtra)
+library(tidyverse)
+library(dplyr)
+library(viridis)
+library(DT)
+library(data.table)
+Sys.setlocale("LC_TIME", "English")
+```
+
+
+Objective:
+
+- Compare the high resolution to the low resolution data for this individual (after start and end of each event has been identified).
+
+
+
+
+# Import data {.tabset}
+
+## High resolution
+```{r, echo=TRUE}
+hr  <- readRDS("./Rdata/STP/3.STP_HR_clean_events_3965.rds")
+DT::datatable(hr[1:30,],options=list(scrollX=T))
+hr = data.frame(hr)
+# number of records
+nrow(hr)
+# Duration of the tag
+round(difftime(hr$dateTime[nrow(hr)], hr$dateTime[1], units="days")) 
+# number of ST drops (when a drop >= 1 deg/min)
+table(hr$type2)
+# range values for STP: 
+summary(hr$stp)
+
+# import events summary from LR
+event <- readRDS("./Rdata/STP/3.Events_start_stop_3965-HR.rds")
+event$dur_class = cut(event$duration, breaks=seq(0, max(event$duration), by=10)) #c(seq(0, 20, by=5), 
+
+phase = event[,c("phase_start","phase_end","duration")] %>%
+  group_by(phase_start) %>%
+  summarise(nrow=n())
+phase$prop = (phase$nrow / nrow(event)) * 100
+```
+
+
+## STP Low resolution
+```{r, echo=TRUE}
+lr <- readRDS("./Rdata/STP/3.STP_3965-TDR_events_clean.rds")
+DT::datatable(lr[1:30,],options=list(scrollX=T))
+lr = data.frame(lr)
+# number of records
+nrow(lr)
+# number of ST drops 
+table(lr$type2)
+# Duration of the tag
+round(difftime(lr$dateTime[nrow(lr)], lr$dateTime[1], units="days")) 
+# range values for STP: removed outliers < 10 and > 38 deg
+summary(lr$stp)
+```
+
+
+
+
+
+
+
+
+
+# TDR overlaid on STP based on my method {.tabset}
+Red dots refer to the feeding start and orange dots to feeding end.
+
+## 2013-08-13 20:43
+
+```{r, echo=FALSE}
+start = hr$dateTime[which(hr$type2=="start")[1]] - 60*5
+end   = hr$dateTime[which(hr$type2=="end")[1]] + 60*5
+st    = setDT(hr)[dateTime %between% c(start,end)]
+st    = data.frame(st)
+
+low = setDT(lr)[dateTime %between% c(start, end)]
+low = data.frame(low)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth (top) and STP profiles (bottom) on 2013-08-13 20:43. Red dots feeding start and orange dots feeding end."}
+p1 = ggplot(st, aes(dateTime, -depth.x)) +
+  geom_path(size=0.1) +
+  geom_point(size=0.5, aes(colour=phase), shape=19) +
+  scale_color_brewer(palette="Set2") +
+  geom_point(size=3, data=st[st$type2=="start",], colour="red", shape=15) +
+  geom_point(size=3, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="Depth (m)",title=paste0("TDR, ", low$dateTime[1])) +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq() +
+  theme(legend.position="none",
+        panel.grid.minor = element_blank(),
+        axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black"))
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.2) +
+  # ylim(30,37) +
+  geom_line(size=0.8, data=low, colour="blue") +
+  geom_point(size=0.2) +
+  geom_point(size=3, data=st[st$type2=="start",], colour="red", shape=15) +
+  geom_point(size=3, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (degrees)",title="STP High (black) & low (blue) resolutions") +
+  theme_tq() +
+  theme(panel.grid.minor = element_blank(),
+        axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black"))
+
+grid.arrange(p1,p2)
+```
+
+
+
+## 2013-08-13 23:36
+
+```{r, echo=FALSE}
+start = hr$dateTime[which(hr$type2=="start")[2]] - 60*5
+end   = hr$dateTime[which(hr$type2=="end")[2]] + 60*5
+st    = setDT(hr)[dateTime %between% c(start,end)]
+st    = data.frame(st)
+low = setDT(lr)[dateTime %between% c(start, end)]
+low = data.frame(low)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth (top) and STP profiles (bottom) on 2013-08-13 23:36. Red dots are feeding start and orange dots feeding end."}
+p1 = ggplot(st, aes(dateTime, -depth.x)) +
+  geom_path(size=0.1) +
+  geom_point(size=0.5, aes(colour=phase), shape=19) +
+  scale_color_brewer(palette="Set2") +
+  geom_point(size=3, data=st[st$type2=="start",], colour="red", shape=15) +
+  geom_point(size=3, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="Depth (m)",title=paste0("TDR, ", low$dateTime[1])) +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq() +
+  theme(legend.position="none",
+        panel.grid.minor = element_blank(),
+        axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black"))
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.2) +
+  # ylim(30,37) +
+  geom_line(size=0.8, data=low, colour="blue") +
+  geom_point(size=0.2) +
+  geom_point(size=3, data=st[st$type2=="start",], colour="red", shape=15) +
+  geom_point(size=3, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (degrees)",title="STP High (black) & low (blue) resolutions") +
+  theme_tq() +
+  theme(panel.grid.minor = element_blank(),
+        axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black"))
+
+grid.arrange(p1,p2)
+```
+
+
+## 2013-08-14 01:15
+
+```{r, echo=FALSE}
+start = hr$dateTime[which(hr$type2=="start")[3]] - 60*5
+end   = hr$dateTime[which(hr$type2=="end")[3]] + 60*5
+st    = setDT(hr)[dateTime %between% c(start,end)]
+st    = data.frame(st)
+low = setDT(lr)[dateTime %between% c(start, end)]
+low = data.frame(low)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth (top) and STP profiles (bottom). Red dots are feeding start and orange dots feeding end."}
+p1 = ggplot(st, aes(dateTime, -depth.x)) +
+  geom_path(size=0.1) +
+  geom_point(size=0.5, aes(colour=phase), shape=19) +
+  scale_color_brewer(palette="Set2") +
+  geom_point(size=3, data=st[st$type2=="start",], colour="red", shape=15) +
+  geom_point(size=3, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="Depth (m)",title=paste0("TDR, ", low$dateTime[1])) +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq() +
+  theme(legend.position="none",
+        panel.grid.minor = element_blank(),
+        axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black"))
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.2) +
+  # ylim(30,37) +
+  geom_line(size=0.8, data=low, colour="blue") +
+  geom_point(size=0.2) +
+  geom_point(size=3, data=st[st$type2=="start",], colour="red", shape=15) +
+  geom_point(size=3, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (degrees)",title="STP High (black) & low (blue) resolutions") +
+  theme_tq() +
+  theme(panel.grid.minor = element_blank(),
+        axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black"))
+
+grid.arrange(p1,p2)
+```
+
+
+
+## 2013-08-14 08:50
+
+```{r, echo=FALSE}
+start = hr$dateTime[which(hr$type2=="start")[9]] - 60*5
+end   = hr$dateTime[which(hr$type2=="end")[9]] + 60*5
+st    = setDT(hr)[dateTime %between% c(start,end)]
+st    = data.frame(st)
+low = setDT(lr)[dateTime %between% c(start, end)]
+low = data.frame(low)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth (top) and STP profiles (bottom). Red dots are feeding start and orange dots feeding end."}
+p1 = ggplot(st, aes(dateTime, -depth.x)) +
+  geom_path(size=0.1) +
+  geom_point(size=0.5, aes(colour=phase), shape=19) +
+  scale_color_brewer(palette="Set2") +
+  geom_point(size=3, data=st[st$type2=="start",], colour="red", shape=15) +
+  geom_point(size=3, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="Depth (m)",title=paste0("TDR, ", low$dateTime[1])) +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq() +
+  theme(legend.position="none",
+        panel.grid.minor = element_blank(),
+        axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black"))
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.2) +
+  # ylim(30,37) +
+  geom_line(size=0.8, data=low, colour="blue") +
+  geom_point(size=0.2) +
+  geom_point(size=3, data=st[st$type2=="start",], colour="red", shape=15) +
+  geom_point(size=3, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (degrees)",title="STP High (black) & low (blue) resolutions") +
+  theme_tq() +
+  theme(panel.grid.minor = element_blank(),
+        axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black"))
+
+grid.arrange(p1,p2)
+```
+
+
+
+## 2013-08-14 09:21
+
+```{r, echo=FALSE}
+start = hr$dateTime[which(hr$type2=="start")[10]] - 60*5
+end   = hr$dateTime[which(hr$type2=="end")[10]] + 60*5
+st    = setDT(hr)[dateTime %between% c(start,end)]
+st    = data.frame(st)
+low = setDT(lr)[dateTime %between% c(start, end)]
+low = data.frame(low)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth (top) and STP profiles (bottom). Red dots are feeding start and orange dots feeding end."}
+p1 = ggplot(st, aes(dateTime, -depth.x)) +
+  geom_path(size=0.1) +
+  geom_point(size=0.5, aes(colour=phase), shape=19) +
+  scale_color_brewer(palette="Set2") +
+  geom_point(size=3, data=st[st$type2=="start",], colour="red", shape=15) +
+  geom_point(size=3, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="Depth (m)",title=paste0("TDR, ", low$dateTime[1])) +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq() +
+  theme(legend.position="none",
+        panel.grid.minor = element_blank(),
+        axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black"))
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.2) +
+  # ylim(30,37) +
+  geom_line(size=0.8, data=low, colour="blue") +
+  geom_point(size=0.2) +
+  geom_point(size=3, data=st[st$type2=="start",], colour="red", shape=15) +
+  geom_point(size=3, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (degrees)",title="STP High (black) & low (blue) resolutions") +
+  theme_tq() +
+  theme(panel.grid.minor = element_blank(),
+        axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black"))
+
+grid.arrange(p1,p2)
+```
+
+
+
+
+## 2013-08-15 03:07
+
+```{r, echo=FALSE}
+start = hr$dateTime[which(hr$type2=="start")[20]] - 60*5
+end   = hr$dateTime[which(hr$type2=="end")[20]] + 60*40
+st    = setDT(hr)[dateTime %between% c(start,end)]
+st    = data.frame(st)
+low = setDT(lr)[dateTime %between% c(start, end)]
+low = data.frame(low)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth (top) and STP profiles (bottom). Red dots are feeding start and orange dots feeding end."}
+p1 = ggplot(st, aes(dateTime, -depth.x)) +
+  geom_path(size=0.1) +
+  geom_point(size=0.5, aes(colour=phase), shape=19) +
+  scale_color_brewer(palette="Set2") +
+  geom_point(size=3, data=st[st$type2=="start",], colour="red", shape=15) +
+  geom_point(size=3, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="Depth (m)",title=paste0("TDR, ", low$dateTime[1])) +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq() +
+  theme(legend.position="none",
+        panel.grid.minor = element_blank(),
+        axis.text.y = element_text(size=8,vjust=0.5,angle=90,color="black"))
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.2) +
+  # ylim(30,37) +
+  geom_line(size=0.8, data=low, colour="blue") +
+  geom_point(size=0.2) +
+  geom_point(size=3, data=st[st$type2=="start",], colour="red", shape=15) +
+  geom_point(size=3, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (degrees)",title="STP High (black) & low (blue) resolutions") +
+  theme_tq() +
+  theme(panel.grid.minor = element_blank())
+
+grid.arrange(p1,p2)
+```
+
+
+
+
+
+## 2013-08-15 15:43
+
+```{r, echo=FALSE}
+start = hr$dateTime[which(hr$type2=="start")[30]] - 60*5
+end   = hr$dateTime[which(hr$type2=="end")[30]] + 60*40
+st    = setDT(hr)[dateTime %between% c(start,end)]
+st    = data.frame(st)
+low   = setDT(lr)[dateTime %between% c(start, end)]
+low   = data.frame(low)
+low$dateTime[1]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth (top) and STP profiles (bottom). Red dots are feeding start and orange dots feeding end."}
+p1 = ggplot(st, aes(dateTime, -depth.x)) +
+  geom_path(size=0.1) +
+  geom_point(size=0.5, aes(colour=phase), shape=19) +
+  scale_color_brewer(palette="Set2") +
+  geom_point(size=3, data=st[st$type2=="start",], colour="red", shape=15) +
+  geom_point(size=3, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="Depth (m)",title=paste0("TDR, ", low$dateTime[1])) +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq() +
+  theme(legend.position="none",
+        panel.grid.minor = element_blank(),
+        axis.text.y = element_text(size=8,vjust=0.5,angle=45,color="black"))
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.2) +
+  ylim(30,37) +
+  geom_line(size=0.8, data=low, colour="blue") +
+  geom_point(size=0.2) +
+  geom_point(size=3, data=st[st$type2=="start",], colour="red", shape=15) +
+  geom_point(size=3, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (degrees)",title="STP High & low (blue) resolutions") +
+  theme_tq() +
+  theme(panel.grid.minor = element_blank())
+
+grid.arrange(p1,p2)
+```
+
+
+## 2013-08-16 06:21
+
+```{r, echo=FALSE}
+start = hr$dateTime[which(hr$type2=="start")[40]] - 60*5
+end   = hr$dateTime[which(hr$type2=="end")[40]] + 60*40
+st    = setDT(hr)[dateTime %between% c(start,end)]
+st    = data.frame(st)
+low   = setDT(lr)[dateTime %between% c(start, end)]
+low   = data.frame(low)
+low$dateTime[1]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth (top) and STP profiles (bottom). Red dots are feeding start and orange dots feeding end."}
+p1 = ggplot(st, aes(dateTime, -depth.x)) +
+  geom_path(size=0.1) +
+  geom_point(size=0.5, aes(colour=phase), shape=19) +
+  scale_color_brewer(palette="Set2") +
+  geom_point(size=3, data=st[st$type2=="start",], colour="red", shape=15) +
+  geom_point(size=3, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="Depth (m)",title=paste0("TDR, ", low$dateTime[1])) +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq() +
+  theme(legend.position="none",
+        panel.grid.minor = element_blank(),
+        axis.text.y = element_text(size=8,vjust=0.5,angle=45,color="black"))
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.2) +
+  ylim(30,37) +
+  geom_line(size=0.8, data=low, colour="blue") +
+  geom_point(size=0.2) +
+  geom_point(size=3, data=st[st$type2=="start",], colour="red", shape=15) +
+  geom_point(size=3, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (degrees)",title="STP High & low (blue) resolutions") +
+  theme_tq() +
+  theme(panel.grid.minor = element_blank())
+
+grid.arrange(p1,p2)
+```
+
+
+## 2013-08-16 23:58
+
+```{r, echo=FALSE}
+start = hr$dateTime[which(hr$type2=="start")[50]] - 60*5
+end   = hr$dateTime[which(hr$type2=="end")[50]] + 60*40
+st    = setDT(hr)[dateTime %between% c(start,end)]
+st    = data.frame(st)
+low   = setDT(lr)[dateTime %between% c(start, end)]
+low   = data.frame(low)
+low$dateTime[1]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth (top) and STP profiles (bottom). Red dots are feeding start and orange dots feeding end."}
+p1 = ggplot(st, aes(dateTime, -depth.x)) +
+  geom_path(size=0.1) +
+  geom_point(size=0.5, aes(colour=phase), shape=19) +
+  scale_color_brewer(palette="Set2") +
+  geom_point(size=3, data=st[st$type2=="start",], colour="red", shape=15) +
+  geom_point(size=3, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="Depth (m)",title=paste0("TDR, ", low$dateTime[1])) +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq() +
+  theme(legend.position="none",
+        panel.grid.minor = element_blank(),
+        axis.text.y = element_text(size=8,vjust=0.5,angle=45,color="black"))
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.2) +
+  ylim(30,37) +
+  geom_line(size=0.8, data=low, colour="blue") +
+  geom_point(size=0.2) +
+  geom_point(size=3, data=st[st$type2=="start",], colour="red", shape=15) +
+  geom_point(size=3, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (degrees)",title="STP High & low (blue) resolutions") +
+  theme_tq() +
+  theme(panel.grid.minor = element_blank())
+
+grid.arrange(p1,p2)
+```
+
+
+
+## 2013-08-18 06:13
+
+```{r, echo=FALSE}
+start = hr$dateTime[which(hr$type2=="start")[60]] - 60*5
+end   = hr$dateTime[which(hr$type2=="end")[60]] + 60*40
+st    = setDT(hr)[dateTime %between% c(start,end)]
+st    = data.frame(st)
+low   = setDT(lr)[dateTime %between% c(start, end)]
+low   = data.frame(low)
+low$dateTime[1]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth (top) and STP profiles (bottom). Red dots are feeding start and orange dots feeding end."}
+p1 = ggplot(st, aes(dateTime, -depth.x)) +
+  geom_path(size=0.1) +
+  geom_point(size=0.5, aes(colour=phase), shape=19) +
+  scale_color_brewer(palette="Set2") +
+  geom_point(size=3, data=st[st$type2=="start",], colour="red", shape=15) +
+  geom_point(size=3, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="Depth (m)",title=paste0("TDR, ", low$dateTime[1])) +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq() +
+  theme(legend.position="none",
+        panel.grid.minor = element_blank(),
+        axis.text.y = element_text(size=8,vjust=0.5,angle=45,color="black"))
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.2) +
+  ylim(30,37) +
+  geom_line(size=0.8, data=low, colour="blue") +
+  geom_point(size=0.2) +
+  geom_point(size=3, data=st[st$type2=="start",], colour="red", shape=15) +
+  geom_point(size=3, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (degrees)",title="STP High & low (blue) resolutions") +
+  theme_tq() +
+  theme(panel.grid.minor = element_blank())
+
+grid.arrange(p1,p2)
+```
+
+
+
+## 2013-08-10 04:29
+
+```{r, echo=FALSE}
+start = hr$dateTime[which(hr$type2=="start")[70]] - 60*5
+end   = hr$dateTime[which(hr$type2=="end")[70]] + 60*40
+st    = setDT(hr)[dateTime %between% c(start,end)]
+st    = data.frame(st)
+low   = setDT(lr)[dateTime %between% c(start, end)]
+low   = data.frame(low)
+low$dateTime[1]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth (top) and STP profiles (bottom). Red dots are feeding start and orange dots feeding end."}
+p1 = ggplot(st, aes(dateTime, -depth.x)) +
+  geom_path(size=0.1) +
+  geom_point(size=0.5, aes(colour=phase), shape=19) +
+  scale_color_brewer(palette="Set2") +
+  geom_point(size=3, data=st[st$type2=="start",], colour="red", shape=15) +
+  geom_point(size=3, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="Depth (m)",title=paste0("TDR, ", low$dateTime[1])) +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq() +
+  theme(legend.position="none",
+        panel.grid.minor = element_blank(),
+        axis.text.y = element_text(size=8,vjust=0.5,angle=45,color="black"))
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.2) +
+  ylim(30,37) +
+  geom_line(size=0.8, data=low, colour="blue") +
+  geom_point(size=0.2) +
+  geom_point(size=3, data=st[st$type2=="start",], colour="red", shape=15) +
+  geom_point(size=3, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (degrees)",title="STP High & low (blue) resolutions") +
+  theme_tq() +
+  theme(panel.grid.minor = element_blank())
+
+grid.arrange(p1,p2)
+```
+
+
+
+## 2013-08-20 00:18
+
+```{r, echo=FALSE}
+start = hr$dateTime[which(hr$type2=="start")[80]] - 60*5
+end   = hr$dateTime[which(hr$type2=="end")[80]] + 60*40
+st    = setDT(hr)[dateTime %between% c(start,end)]
+st    = data.frame(st)
+low   = setDT(lr)[dateTime %between% c(start, end)]
+low   = data.frame(low)
+low$dateTime[1]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth (top) and STP profiles (bottom). Red dots are feeding start and orange dots feeding end."}
+p1 = ggplot(st, aes(dateTime, -depth.x)) +
+  geom_path(size=0.1) +
+  geom_point(size=0.5, aes(colour=phase), shape=19) +
+  scale_color_brewer(palette="Set2") +
+  geom_point(size=3, data=st[st$type2=="start",], colour="red", shape=15) +
+  geom_point(size=3, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="Depth (m)",title=paste0("TDR, ", low$dateTime[1])) +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq() +
+  theme(legend.position="none",
+        panel.grid.minor = element_blank(),
+        axis.text.y = element_text(size=8,vjust=0.5,angle=45,color="black"))
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.2) +
+  ylim(30,37) +
+  geom_line(size=0.8, data=low, colour="blue") +
+  geom_point(size=0.2) +
+  geom_point(size=3, data=st[st$type2=="start",], colour="red", shape=15) +
+  geom_point(size=3, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (degrees)",title="STP High & low (blue) resolutions") +
+  theme_tq() +
+  theme(panel.grid.minor = element_blank())
+
+grid.arrange(p1,p2)
+```
+
+
+
+## 2013-08-21 01:47
+
+```{r, echo=FALSE}
+start = hr$dateTime[which(hr$type2=="start")[90]] - 60*5
+end   = hr$dateTime[which(hr$type2=="end")[90]] + 60*40
+st    = setDT(hr)[dateTime %between% c(start,end)]
+st    = data.frame(st)
+low   = setDT(lr)[dateTime %between% c(start, end)]
+low   = data.frame(low)
+low$dateTime[1]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth (top) and STP profiles (bottom). Red dots are feeding start and orange dots feeding end."}
+p1 = ggplot(st, aes(dateTime, -depth.x)) +
+  geom_path(size=0.1) +
+  geom_point(size=0.5, aes(colour=phase), shape=19) +
+  scale_color_brewer(palette="Set2") +
+  geom_point(size=3, data=st[st$type2=="start",], colour="red", shape=15) +
+  geom_point(size=3, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="Depth (m)",title=paste0("TDR, ", low$dateTime[1])) +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq() +
+  theme(legend.position="none",
+        panel.grid.minor = element_blank(),
+        axis.text.y = element_text(size=8,vjust=0.5,angle=45,color="black"))
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.2) +
+  ylim(30,37) +
+  geom_line(size=0.8, data=low, colour="blue") +
+  geom_point(size=0.2) +
+  geom_point(size=3, data=st[st$type2=="start",], colour="red", shape=15) +
+  geom_point(size=3, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (degrees)",title="STP High & low (blue) resolutions") +
+  theme_tq() +
+  theme(panel.grid.minor = element_blank())
+
+grid.arrange(p1,p2)
+```
+
+
+
+## 2013-08-21 08:04
+
+```{r, echo=FALSE}
+start = hr$dateTime[which(hr$type2=="start")[94]] - 60*30
+end   = hr$dateTime[which(hr$type2=="end")[94]] + 60*40
+st    = setDT(hr)[dateTime %between% c(start,end)]
+st    = data.frame(st)
+low   = setDT(lr)[dateTime %between% c(start, end)]
+low   = data.frame(low)
+low$dateTime[1]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth (top) and STP profiles (bottom). Red dots are feeding start and orange dots feeding end."}
+p1 = ggplot(st, aes(dateTime, -depth.x)) +
+  geom_path(size=0.1) +
+  geom_point(size=0.5, aes(colour=phase), shape=19) +
+  scale_color_brewer(palette="Set2") +
+  geom_point(size=3, data=st[st$type2=="start",], colour="red", shape=15) +
+  geom_point(size=3, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="Depth (m)",title=paste0("TDR, ", low$dateTime[1])) +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq() +
+  theme(legend.position="none",
+        panel.grid.minor = element_blank(),
+        axis.text.y = element_text(size=8,vjust=0.5,angle=45,color="black"))
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.2) +
+  ylim(30,37) +
+  geom_line(size=0.8, data=low, colour="blue") +
+  geom_point(size=0.2) +
+  geom_point(size=3, data=st[st$type2=="start",], colour="red", shape=15) +
+  geom_point(size=3, data=st[st$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (degrees)",title="STP High & low (blue) resolutions") +
+  theme_tq() +
+  theme(panel.grid.minor = element_blank())
+
+grid.arrange(p1,p2)
+```
+
+
+
+
+
+# Duration of feeding events  {.tabset}
+
+## Histo of duration
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histogram of the ST drops duration (in min)."}
+ggplot(event, aes(duration)) +
+  geom_histogram(binwidth=5,color="black", fill="lightgrey") + 
+  labs(y="Frequency", x="ST drops duration (min)") +
+  theme_tq()
+```
+Feeding events last between 3 and 50 min (mean: 14.8 min, SD: 8.6 min).
+
+## According to dive phase
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histogram of the ST drop duration (min) acording to dive phase, e.g. D: Descent, A: Ascent, B: Bottom, X: Surface."}
+ggplot(event, aes(duration)) +
+  geom_histogram(binwidth=10, color="black", aes(fill=phase_start)) + 
+  labs(y="Frequency", x="ST drops duration (min)") +
+  facet_wrap(.~phase_start) +
+  theme_tq() +
+  scale_fill_brewer(palette="Set1") +
+  theme(legend.position = "none")
+```
+
+Longer events at the bottom (phase _B_, mean: 18.7 min), but also long events close to the surface (phase _X_, mean: 16 min).
+
+
+
+
+
+
+# Depth of feeding events {.tabset}
+
+## Depth at ST drops (from HR data)
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histogram of the depth (from LR data) of ST drops (m)."}
+ggplot(event, aes(-dep_start)) +
+  geom_histogram(binwidth=20,color="black", fill="lightgrey") + 
+  labs(y="Frequency", x="ST drops depth (m)") +
+  coord_flip() +
+  theme_tq()
+```
+
+
+## According to duration
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histogram of the depth of ST drops (m)."}
+ggplot(event, aes(-dep_start)) +
+  geom_histogram(binwidth=10, color="black", aes(fill=dur_class)) + 
+  labs(y="Frequency", x="ST drops depth (m)") +
+  coord_flip() +
+  theme_tq()
+```
+
+## Depth at ST drops according to dive phase
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histogram of the depth of ST drops (m)."}
+ggplot(event, aes(-dep_start)) +
+  geom_histogram(binwidth=10, color="black", aes(fill=phase_start)) + 
+  labs(y="Frequency", x="ST drops depth (m)") +
+  coord_flip() +
+  theme_tq()
+```
+
+
+
+
+# Dive phase frequency {.tabset}
+
+## Summary
+```{r, echo=FALSE}
+# Compute the position of labels
+data <- phase %>% 
+  arrange(desc(phase_start)) %>%
+  mutate(prop = prop) %>%
+  mutate(ypos = cumsum(prop)- 0.5*prop )
+data$prop = round(data$prop)
+
+kruskal.test(duration~phase_start, event)
+event %>%
+  group_by(phase_start) %>%
+  summarise(mean=mean(duration),
+            sd=sd(duration),
+            min=min(duration),
+            max=max(duration))
+```
+ 
+## Pie chart
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histogram of the depth of ST drops (m)."}
+ggplot(data, aes(x="", y=prop, fill=phase_start)) +
+  geom_bar(stat="identity", width=1) +
+  coord_polar("y", start=0) +
+  theme_void() +
+  geom_text(aes(y=ypos, label=paste0(prop,"%")), color="white", size=6) +
+  scale_fill_brewer(palette="Set1")
+```
+A majority of ST drops during the Bottom (_B_, 37%), Ascent (_A_, 26%) and Descent (_D_, 22%). 15% of the events occurred at the surface (_X_), might be some water ingestion.
+
+
+
+

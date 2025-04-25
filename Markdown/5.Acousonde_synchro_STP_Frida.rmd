@@ -1,0 +1,191 @@
+---
+title: "Acousonde synchro STP for Frida"
+author: "Philippine CHAMBAULT"
+date: "11/01/2022"
+output:
+  bookdown::html_document2:
+    number_sections: yes
+    code_folding: show
+    df_print: default
+    fig_caption: yes
+    toc: yes
+    toc_float:
+      collapsed: yes
+      smooth_scroll: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo      = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE,
+  # cache   = FALSE,
+  out.width = "100%"
+  # comment = NA
+)
+```
+
+                       
+
+```{r, global_options, include=FALSE}
+library(ggplot2)
+library(gridExtra)
+library(tidyverse)
+library(dplyr)
+library(viridis)
+library(DT)
+library(data.table)
+library(tidyquant)
+Sys.setlocale("LC_TIME", "English")
+```
+
+Objective: 
+
+Test different time lag correction for the acousonde based on the ST values derived from the bips recorded byt he acousonde for Frida.
+
+
+
+
+# Import data {.tabset}
+
+## STP 
+```{r, echo=F}
+setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES")
+stp  <- readRDS("./Rdata/STP/3.STP_clean_7ids.RDS")
+stp = data.frame(stp)
+stp = stp[stp$ptt=="3965-Frida",]
+```
+
+## Acousonde
+```{r, echo=F}
+buzz <- readRDS("./Rdata/Acou_calib/buzz_Eistla_FRida_Thora_phases_2m.RDS")
+buzz = buzz[buzz$id=="Frida",]
+```
+
+
+
+
+
+
+# Synchronize acousonde and STP {.tabset}
+
+## No correction
+
+```{r, echo=F}
+tab0 = merge(buzz, stp[,c("dateTime","depth","stp","type","type2","water_temp","feed")], 
+            by="dateTime",all.x=TRUE)
+cor.test(tab0$depth.x, tab0$depth.y)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Correlation between depth recorded from STP and the ones from the Acousonde from Frida before removing outliers."}
+ggplot(tab0, aes(depth.x, depth.y)) +
+  labs(x="Depth from STP (m)",y="Depth from Acousonde (m)",title="Frida") +
+  geom_smooth(method=lm,size=0.6) +
+  geom_point(size=1, colour="brown") + 
+  xlim(0,400) +
+  theme_tq()
+```
+
+
+## 2 min forward
+
+```{r, echo=F}
+buzz2 <- buzz
+buzz2$dateTime = buzz2$dateTime + (2*60)
+tab0 = merge(buzz2, stp[,c("dateTime","depth","stp","type","type2","water_temp","feed")], 
+             by="dateTime",all.x=TRUE)
+cor.test(tab0$depth.x, tab0$depth.y)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Correlation between depth recorded from STP and the ones from the Acousonde from Frida after moving forward the acousonde by 2 min."}
+ggplot(tab0, aes(depth.x, depth.y)) +
+  labs(x="Depth from STP (m)",y="Depth from Acousonde (m)",title="Acou + 2 min") +
+  geom_smooth(method=lm,size=0.6) +
+  geom_point(size=1, colour="brown") + 
+  xlim(0,400) +
+  theme_tq()
+```
+
+
+
+
+## 2 min 30 sec forward
+
+```{r, echo=F}
+buzz2 <- buzz
+buzz2$dateTime = buzz2$dateTime + (2.5*60)
+tab0 = merge(buzz2, stp[,c("dateTime","depth","stp","type","type2","water_temp","feed")], 
+             by="dateTime",all.x=TRUE)
+cor.test(tab0$depth.x, tab0$depth.y)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Correlation between depth recorded from STP and the ones from the Acousonde from Frida after moving forward the acousonde by 2 min 30 sec."}
+ggplot(tab0, aes(depth.x, depth.y)) +
+  labs(x="Depth from STP (m)",y="Depth from Acousonde (m)",title="Acou + 2 min 30 sec") +
+  geom_smooth(method=lm,size=0.6) +
+  geom_point(size=1, colour="brown") + 
+  xlim(0,400) +
+  theme_tq()
+```
+
+
+## 3 min forward
+
+```{r, echo=F}
+buzz2 <- buzz
+buzz2$dateTime = buzz2$dateTime + (3*60)
+tab0 = merge(buzz2, stp[,c("dateTime","depth","stp","type","type2","water_temp","feed")], 
+             by="dateTime",all.x=TRUE)
+cor.test(tab0$depth.x, tab0$depth.y)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Correlation between depth recorded from STP and the ones from the Acousonde from Frida after moving forward the acousonde by 3 min."}
+ggplot(tab0, aes(depth.x, depth.y)) +
+  labs(x="Depth from STP (m)",y="Depth from Acousonde (m)",title="Acou + 3 min") +
+  geom_smooth(method=lm,size=0.6) +
+  geom_point(size=1, colour="brown") + 
+  xlim(0,400) +
+  theme_tq()
+```
+
+
+## 3 min 30 sec forward
+
+```{r, echo=F}
+buzz2 <- buzz
+buzz2$dateTime = buzz2$dateTime + (3.5*60)
+tab0 = merge(buzz2, stp[,c("dateTime","depth","stp","type","type2","water_temp","feed")], 
+             by="dateTime",all.x=TRUE)
+cor.test(tab0$depth.x, tab0$depth.y)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Correlation between depth recorded from STP and the ones from the Acousonde from Frida after moving forward the acousonde by 3 min 30 sec."}
+ggplot(tab0, aes(depth.x, depth.y)) +
+  labs(x="Depth from STP (m)",y="Depth from Acousonde (m)",title="Acou + 3 min 30 sec") +
+  geom_smooth(method=lm,size=0.6) +
+  geom_point(size=1, colour="brown") + 
+  xlim(0,400) +
+  theme_tq()
+```
+
+
+
+## 4 min forward
+
+```{r, echo=F}
+buzz2 <- buzz
+buzz2$dateTime = buzz2$dateTime + (4*60)
+tab0 = merge(buzz2, stp[,c("dateTime","depth","stp","type","type2","water_temp","feed")], 
+             by="dateTime",all.x=TRUE)
+cor.test(tab0$depth.x, tab0$depth.y)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Correlation between depth recorded from STP and the ones from the Acousonde from Frida after moving forward the acousonde by 4 min."}
+ggplot(tab0, aes(depth.x, depth.y)) +
+  labs(x="Depth from STP (m)",y="Depth from Acousonde (m)",title="Acou + 4 min") +
+  geom_smooth(method=lm,size=0.6) +
+  geom_point(size=1, colour="brown") + 
+  xlim(0,400) +
+  theme_tq()
+```

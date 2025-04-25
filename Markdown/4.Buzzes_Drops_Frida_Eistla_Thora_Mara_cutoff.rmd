@@ -1,0 +1,675 @@
+---
+title: "Buzzes and drops (Eistla, Frida, Thora, Mara) with depth cutoff"
+author: "Philippine CHAMBAULT"
+date: "03/01/2021"
+output:
+  bookdown::html_document2:
+    number_sections: yes
+    code_folding: show
+    df_print: default
+    fig_caption: yes
+    toc: yes
+    toc_float:
+      collapsed: yes
+      smooth_scroll: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo      = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE,
+  # cache   = FALSE,
+  out.width = "100%"
+  # comment = NA
+)
+```
+
+                       
+
+```{r, global_options, include=FALSE}
+library(ggplot2)
+library(tidyquant)
+library(gridExtra)
+library(tidyverse)
+library(dplyr)
+library(viridis)
+library(DT)
+library(data.table)
+Sys.setlocale("LC_TIME", "English")
+```
+
+
+Objectives:
+
+- Set a depth cutoff to remove water ingestion (_mariposa_)
+
+- Estimate the number of dives with buzzes
+
+- Estimate the number of dives with ST drops
+
+- Calculate the proportion of successful (dives with both buzz and drop) vs. unsuccessful dives.
+
+
+
+
+# Import data
+
+```{r, echo=T}
+# load "dive3" dataset: 1 row=1 dive
+dive3  <- readRDS("./Rdata/STP/4.Dive_summary_drop_buzz_clean_Eistla_Thora_Frida_Mara.rds")
+DT::datatable(dive3[1:30,],options=list(scrollX=T))
+dive3 = dive3[,-c(20:21)]
+colnames(dive3)[2] = "ptt"
+dive3 = data.frame(dive3)
+# number of dives per ID
+table(dive3$ptt)
+# number of dives shallower than 5 m
+nrow(dive3[dive3$maxdep<5,]) / nrow(dive3) * 100
+# remove depth records shallower than 5 m
+dive3 = dive3[dive3$maxdep>5,]
+# number of remaining dives > 5 m per ID
+table(dive3$ptt)
+```
+
+
+
+
+
+# Instrumention effect (from 4 acousondes + #3965) {.tabset}
+
+```{r, echo=T}
+# load "TDR #3965" dataset: 1 row=1 depth record
+tdr <- readRDS("./Rdata/STP/3.STP_HR_clean_events_3965.RDS")
+# number of dives shallower than 5 m
+nrow(tdr[tdr$depth.x<5,]) / nrow(tdr) * 100  # 39%
+# remove depth records shallower than 5 m
+tdr = tdr[tdr$depth.x>5,]
+# number of remaining dives > 5 m
+table(tdr$type2)  # 79 ST drops
+tdr$buzz = 0
+tdr$ptt  = "3965"
+
+# load "acousonde" dataset: 1 row=1 depth record
+acou <- readRDS("./Rdata/STP/4.STP_Acou_mergeAll_Eistla_Thora_Frida_Mara.rds")
+# number of events per ID
+table(acou$type2, acou$ptt)
+# number of dives shallower than 5 m
+nrow(acou[acou$depth.x<5,]) / nrow(acou) * 100  # 49%
+# remove depth records shallower than 5 m
+acou = acou[acou$depth.x>5,]
+# number of remaining dives > 5 m per ID
+table(acou$type2, acou$ptt)
+
+# merge both datasets
+acou = rbind(acou[,c("ptt","dateTime","depth.x","stp","type2","buzz","phase")],
+             tdr[,c("ptt","dateTime","depth.x","stp","type2","buzz","phase")])
+acou$ptt = as.factor(acou$ptt)
+acou = data.frame(acou)
+
+# extract day at release, day of 1st buzz, day of 1st drop
+time = acou %>%
+  group_by(ptt) %>%
+  summarise("release_day"=head(dateTime,1),
+            "day_first_buzz"=head(dateTime[buzz!=0],1),
+            "day_first_drop"=head(dateTime[type2=="start" & !is.na(type2)],1))
+row = data.frame("ptt"="3965","release_day"=head(tdr$dateTime,1),
+                 "day_first_buzz"=NA,
+                 "day_first_drop"=head(tdr$dateTime[tdr$type2=="start"  & !is.na(tdr$type2)],1))
+time = data.frame(time)
+time$day_first_buzz = as.character(time$day_first_buzz)
+time = rbind(row, time)
+time
+```
+
+
+## Depth profiles with buzzes and drops
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profiles recorded from the acousonde after removing drops occurring above 5 m (drops are the red dots and buzzes the green dots)."}
+ggplot(acou, aes(x=dateTime, y=-depth.x)) +
+  geom_point(pch=19, size=0.2) +
+  geom_point(data=acou[acou$buzz==1,],aes(dateTime, -depth.x),
+             colour="green",pch=19, size=0.2) +
+  geom_point(data=acou[acou$type2=="start" & !is.na(acou$type2),],
+             aes(dateTime, -depth.x),
+             colour="red",pch=19, size=0.2) +
+  labs(y="Acousonde depth (m)", x="") +
+  geom_hline(yintercept=-5, linetype="dashed",lwd=0.5,colour="yellow") +
+  facet_wrap(.~ptt, scales="free_x") +
+  theme_tq()
+```
+
+
+
+## Duration between release and first buzz (h)
+```{r, echo=F}
+time$day_first_buzz = as.POSIXct(strptime(time$day_first_buzz,
+                                     format="%Y-%m-%d %H:%M:%S"), tz="GMT")
+time$hours_first_buzz = as.numeric(difftime(time$day_first_buzz, 
+                                            time$release_day, units="hours"))
+time[,c(1,5)]
+```
+The first buzzes after release occurred between 9h (Mara) and 27h (Frida) after instrumentation.
+
+
+
+## Duration between release and first drop (h)
+```{r, echo=F}
+time$hours_first_drop = as.numeric(difftime(time$day_first_drop, time$release_day, 
+                                           units="hours"))
+time[,c(1,6)]
+```
+Some drops occurred way before the first buzzes (at least for Mara and Thora < 1h after release), even after removing drops occurring above 5 m.
+
+
+
+
+
+
+
+
+
+# Remove dives before the first buzz {.tabset}
+```{r, echo=T}
+acou2 = acou[!acou$ptt=="3965",] %>%
+  group_by(ptt) %>%
+  mutate(release_date = first(dateTime),
+         last_date = last(dateTime),
+         first_buzz_date = first(dateTime[buzz!=0]),
+         keep.delete =  ifelse(dateTime < first_buzz_date, 'delete', 'keep'))
+acou2 = acou2[acou2$keep.delete=="keep",]
+table(acou2$keep.delete)
+acou2$ptt = droplevels(acou2$ptt)
+
+# number of dives left per ID
+table(acou2$ptt)
+
+# number of ST drops left per ID
+table(acou2$ptt[acou2$type2=="start"])
+acou2 = data.frame(acou2)
+
+# extract day at release, day of 1st buzz, day of 1st drop
+time = acou2 %>%
+  group_by(ptt) %>%
+  summarise("release_day"=head(dateTime,1),
+            "day_first_buzz"=head(dateTime[buzz!=0],1),
+            "day_first_drop"=head(dateTime[type2=="start" & !is.na(type2)],1))
+time
+```
+
+## Depth profiles with buzzes and drops
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profiles recorded from the acousonde after removing dives occurring before first buzz (drops are the red dots and buzzes the green dots)."}
+ggplot(acou2, aes(x=dateTime, y=-depth.x)) +
+  geom_point(pch=19, size=0.2) +
+  geom_point(data=acou2[acou2$buzz==1,],aes(dateTime, -depth.x),
+             colour="green",pch=19, size=0.2) +
+  geom_point(data=acou2[acou2$type2=="start" & !is.na(acou2$type2),],
+             aes(dateTime, -depth.x),
+             colour="red",pch=19, size=0.6) +
+  labs(y="Acousonde depth (m)", x="") +
+  # geom_hline(yintercept=-5, linetype="dashed",lwd=0.5,colour="yellow") +
+  facet_wrap(.~ptt, scales="free_x") +
+  theme_tq()
+```
+
+
+
+
+
+
+
+
+
+# Drops characteristics (on the 7 ids) {.tabset}
+
+```{r, echo=T}
+# load "event" dataset containing summary of each ST drop
+event <- readRDS("./Rdata/STP/3.Events_start_stop_7ids.rds")
+# much more events compared to the acousonde dataset because contains the whole STP data, not only the one matching the acousondes
+
+event = data.frame(event)
+# number of events per ID
+table(event$ptt)
+# number of events above 5 m
+nrow(event[event$depth<5,]) / nrow(event) * 100 # 34%
+# remove events occurring above 5 m
+event = event[event$depth>5,]
+# number of events per ID after removing those above 5 m
+table(event$ptt)
+
+# remove 7617-15 due to very low sample size
+event = event[!(event$ptt=="7617-15"),]
+event$ptt = droplevels(event$ptt)
+event = event[!is.na(event$ptt),]
+
+# number of records and ST drops/ID
+dat = event[,c("ptt","start","end","mean_stp")] %>%
+  group_by(ptt) %>%
+  summarise(STdrop=n(),
+            start=head(start, 1),
+            end=tail(end, 1))
+dat$dur = as.numeric(difftime(dat$end, dat$start, units="days"))
+
+# number of daily ST drops/ID
+dat = dat[!is.na(dat$ptt),]
+dat$daily_drop = dat$STdrop / as.numeric(dat$dur)
+dat = dat[order(dat$daily_drop),]
+dat
+```
+
+
+
+## Number of ST drops per individual
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histogram of the number of ST drops per individual after removing drops above 5 m."}
+ggplot(dat, aes(y=STdrop, x=reorder(ptt,STdrop), fill=ptt)) +
+  geom_bar(stat="identity") + 
+  labs(x="ID", y="Number of ST drops") +
+  geom_text(aes(label=dat$STdrop), vjust=0, size=4) +
+  scale_fill_tq() +
+  theme_tq() +
+  theme(legend.position="none")
+```
+
+## Number of daily ST drops per individual
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histogram of the number of daily ST drops per individual after removing drops above 5 m."}
+ggplot(dat, aes(y=daily_drop, x=reorder(ptt,daily_drop), fill=ptt)) +
+  geom_bar(stat="identity") + 
+  labs(x="ID", y="Number of daily ST drops") +
+  geom_text(aes(label=signif(dat$daily_drop,2)), vjust=0, size=4) +
+  scale_fill_tq() +
+  theme_tq() +
+  theme(legend.position="none")
+```
+
+## Drop duration
+```{r, echo=T}
+# table summary of drop duration (min) per ID
+event %>%
+  group_by(ptt) %>%
+  summarise(mean=mean(dur, na.rm=T),
+            sd=sd(dur, na.rm=T),
+            min=min(dur, na.rm=T),
+            max=max(dur, na.rm=T))
+```
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histogram of the mean drop duration per individual."}
+ggplot(event, aes(dur)) +
+  geom_histogram(binwidth=5,color="black", fill="lightgrey") + 
+  labs(y="Counts", x="Mean drop duration (min)") +
+  facet_wrap(.~ptt, scales="free_y") +
+  theme_tq()
+```
+
+
+## Drop depth
+```{r, echo=T}
+# table summary of drop depth (m) per ID
+event %>%
+  group_by(ptt) %>%
+  summarise(mean=mean(depth, na.rm=T),
+            sd=sd(depth, na.rm=T),
+            min=min(depth, na.rm=T),
+            max=max(depth, na.rm=T))
+```
+Some drops above 5 m (cutoff at 10 m ?). Very few depths for #Eistla and #7617-15.
+
+
+
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histogram of the mean dive depth per individual during ST drops (derived from STP)."}
+ggplot(event, aes(-depth)) +
+  geom_histogram(binwidth=20,color="black", fill="lightgrey") + 
+  labs(y="N dive with drop", x="Mean dive depth (m)") +
+  facet_wrap(.~ptt, scales="free_x") +
+  coord_flip() +
+  theme_tq()
+```
+
+
+## Inter-drop duration (in hour)
+
+```{r, echo=T}
+# table summary of inter-drop duration (h) per ID
+event %>%
+  group_by(ptt) %>%
+  summarise(mean=mean(dur_nofeed/60, na.rm=T),
+            sd=sd(dur_nofeed/60, na.rm=T),
+            min=min(dur_nofeed/60, na.rm=T),
+            max=max(dur_nofeed/60, na.rm=T))
+```
+
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Boxplot of the inter-drop duration (in hours) per individual."}
+ggplot(event, aes(x=ptt, y=dur_nofeed/60)) +
+  geom_boxplot(aes(fill=ptt)) + 
+  labs(x="PTT", y="Inter-drop duration (h)") +
+  scale_fill_tq() +
+  theme_tq() +
+  ylim(0,20) +
+  theme(legend.position="none")
+```
+Voluntarily fixed a threshold at 20 min, so removed few outliers.
+
+
+
+
+
+
+
+
+# Buzzes and drops {.tabset}
+
+## Histogram of mean depth
+
+```{r, echo=F}
+sum2 = dive3 %>%
+  group_by(ptt) %>%
+  summarise(tot_dive=n(),
+            tot_buzz=sum(buzz),
+            buzz_dive=mean(buzz),
+            dives_buzz=sum(buzz!=0),
+            max_buzz_dive=max(buzz),
+            tot_drop=sum(drop, na.rm=T),
+            drop_dive=mean(drop, na.rm=T),
+            unsuccessful=sum(buzz>=1 & drop==0),
+            successful=sum(buzz>=1 & drop!=0))
+sum2 = data.frame(sum2)
+sum2$prop_buzz       = sum2$dives_buzz / sum2$tot_dive * 100
+sum2$prop_unsuccess  = sum2$unsuccessful / sum2$dives_buzz * 100
+sum2$prop_success    = sum2$successful / sum2$dives_buzz * 100
+sum2
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histogram of the mean dive depth  (derived from acousonde) per individual according to the number of drop per dive."}
+ggplot(dive3, aes(-meandep)) + #, fill=as.factor(drop)
+  geom_histogram(binwidth=10, position="dodge") + 
+  labs(y="N dive", x="Mean dive depth (m)") +
+  facet_grid(drop~ptt, scales="free_x") +
+  coord_flip() +
+  theme_tq() +
+  scale_fill_tq() +
+  theme(legend.position="none")
+```
+Dives including 1 drop occur mainly below 200 m for both individuals, although a very few dives with drops occurred close to the surface as well. One dive including 2 drops was performed by Eistla.
+
+
+
+## Proportion of dives with buzzes
+
+```{r, echo=F}
+sum = data.frame("ptt"=c("Eistla","Eistla","Frida","Frida",
+                         "Mara","Mara","Thora","Thora"),
+                 "buzz"=c(0,1,0,1,0,1,0,1),
+                 "dives"=c(sum2$tot_dive[1]-sum2$dives_buzz[1],sum2$dives_buzz[1],
+                           sum2$tot_dive[2]-sum2$dives_buzz[2],sum2$dives_buzz[2],
+                           sum2$tot_dive[3]-sum2$dives_buzz[3],sum2$dives_buzz[3],
+                           sum2$tot_dive[4]-sum2$dives_buzz[4],sum2$dives_buzz[4]))
+sum$prop[sum$ptt=="Eistla"] = sum$dives[sum$ptt=="Eistla"] / sum2$tot_dive[1] * 100
+sum$prop[sum$ptt=="Thora"]  = sum$dives[sum$ptt=="Thora"] / sum2$tot_dive[4] * 100
+sum$prop[sum$ptt=="Mara"] = sum$dives[sum$ptt=="Mara"] / sum2$tot_dive[3] * 100
+sum$prop[sum$ptt=="Frida"] = sum$dives[sum$ptt=="Frida"] / sum2$tot_dive[2] * 100
+
+sum$buzz = as.factor(sum$buzz)
+sum
+```
+
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histogram of the number of dives with buzzes."}
+ggplot(sum, aes(x=ptt, y=prop, fill=buzz)) +
+  geom_bar(stat="identity", position="fill") + 
+  labs(y="Frequency", x="PTT") +
+  theme_tq() +
+  scale_fill_tq() 
+```
+39% of the dives with buzzes for Eistla, 13% for Frida, 5% for Mara and 25% for Thora. SLightly higher numbers compared when all dives considered (without cutoff at 5 m).
+
+
+
+## Proportion of dives with drops
+
+```{r, echo=F}
+sum = data.frame("ptt"=c("Eistla","Eistla","Frida","Frida",
+                         "Mara","Mara","Thora","Thora"),
+                 "drop"=c(0,1,0,1,0,1,0,1),
+                 "dives"=c(sum2$tot_dive[1]-sum2$tot_drop[1],sum2$tot_drop[1],
+                           sum2$tot_dive[2]-sum2$tot_drop[2],sum2$tot_drop[2],
+                           sum2$tot_dive[3]-sum2$tot_drop[3],sum2$tot_drop[3],
+                           sum2$tot_dive[4]-sum2$tot_drop[4],sum2$tot_drop[4]))
+sum$prop[sum$ptt=="Eistla"] = sum$dives[sum$ptt=="Eistla"] / sum2$tot_dive[1] * 100
+sum$prop[sum$ptt=="Frida"]  = sum$dives[sum$ptt=="Frida"] / sum2$tot_dive[2] * 100
+sum$prop[sum$ptt=="Mara"]  = sum$dives[sum$ptt=="Mara"] / sum2$tot_dive[3] * 100
+sum$prop[sum$ptt=="Thora"]  = sum$dives[sum$ptt=="Thora"] / sum2$tot_dive[4] * 100
+sum$drop = as.factor(sum$drop)
+sum
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histogram of the proportion of dives with drops."}
+ggplot(sum, aes(x=ptt, y=prop, fill=drop)) +
+  geom_bar(stat="identity", position="fill") + 
+  labs(y="Frequency", x="PTT") +
+  theme_tq() +
+  scale_fill_tq() 
+```
+Among the total number of dives per individual, less than 2% contained ST drops except for Mara (8%). This number is very low, either indicative of a low level of feeding during summer, but also of a technical issue with the STP missing some events.
+
+
+
+
+## Number of buzz per dive
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Boxplot of the number of buzz per dive."}
+ggplot(dive3, aes(x=ptt, y=buzz, fill=ptt)) +
+  geom_boxplot() +
+  labs(y="Number of buzzes", x="PTT") +
+  theme_tq() +
+  scale_fill_tq() +
+  theme(legend.position="none")
+```
+Up to 36 and 101 buzzes were recorded during a single dive for Eistla and Thora (only 8/dive tops for Mara), respectively. But on average, the 4 females performed between 0.1 (Mara) and 6.5 (Eistla) buzzes per dive. Should remove the first hours after capture (before the first buzz to be more realistic).
+
+
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histogram of the mean number of buzzes per dive."}
+ggplot(sum2, aes(x=ptt, y=buzz_dive, fill=ptt)) +
+  geom_bar(stat="identity") + 
+  labs(y="Average number of buzzes/dive", x="PTT") +
+  geom_text(aes(label=signif(buzz_dive,2)), vjust=0, size=4) +
+  theme_tq() +
+  scale_fill_tq() +
+  theme(legend.position="none")
+```
+
+
+
+## Number of drop per dive
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histogram of the mean number of drop per dive."}
+ggplot(sum2, aes(x=ptt, y=drop_dive, fill=ptt)) +
+  geom_bar(stat="identity") + 
+  labs(y="Number of drops/dive", x="PTT") +
+  geom_text(aes(label=signif(drop_dive,2)), vjust=0, size=4) +
+  theme_tq() +
+  scale_fill_tq() +
+  theme(legend.position="none")
+```
+
+
+## Successful vs. unsuccessful dives
+
+```{r, echo=F}
+sum2[,c("ptt","prop_unsuccess","prop_success")]
+```
+Very low values: between 2.9 and 5.7 % of the dives appear successful, except the higher proportion for Mara (20%) but likely be due to the very low number of drop during dives with buzzes (only an hour of match between the acousonde and the STP). Despite the high temporal resolution of the STP (every 2 minutes when no drop and every 1 min during drop), some data gaps suggest the tag might have missed some events. This hypothesis is reinforced by the high resolution data collected from #3965 from which the tag was retrieved and recorded nearly three times more events (12/day) vs. less than 5/day for Eistla and Thora. Could also be due to a strong inter-individual heterogeneity.
+
+
+
+
+## Dives with drops but no buzz
+
+```{r, echo=F}
+nrow(dive3[dive3$buzz==0 & dive3$drop!=0,])  # 18 dives
+dive3[dive3$buzz==0 & dive3$drop!=0,c("ptt","dive","maxdep","dur")]
+summary(dive3$maxdep[dive3$buzz==0 & dive3$drop!=0])
+```
+18 dives in total contained a drop but no buzz. Some of these dives (n=6) were shallow (<65 m), and could be therefore associated with mariposa rather than prey ingestion, especially the one occurring at 17.6 m due to the very short duration of the event (<1 min), but some others were deep and possibly real prey catches.
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Duration between drop and buzz {.tabset}
+
+## Buzz before drop
+
+```{r, echo=F}
+dive3 %>%
+  group_by(ptt) %>%
+  summarise(mean=mean(dur_bef_drop, na.rm=T),
+            sd=sd(dur_bef_drop, na.rm=T),
+            max=max(dur_bef_drop, na.rm=T),
+            min=min(dur_bef_drop, na.rm=T))
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Boxplot of the time elapsed (in sec) between drop and the buzz before drop."}
+ggplot(dive3, aes(x=ptt, y=dur_bef_drop, fill=ptt)) +
+  geom_boxplot() +
+  labs(y="Duration (sec)", x="PTT") +
+  theme_tq() +
+  scale_fill_tq() +
+  theme(legend.position="none")
+```
+The average duration between a buzz and the next drop varies between 17 (Mara) and 67 sec (Frida). The maximum duration is 100 sec, and the minimum duration 2 sec.
+
+
+
+
+
+## Buzz after drop
+
+```{r, echo=F}
+dive3 %>%
+  group_by(ptt) %>%
+  summarise(mean=mean(dur_aft_drop, na.rm=T),
+            sd=sd(dur_aft_drop, na.rm=T),
+            max=max(dur_aft_drop, na.rm=T),
+            min=min(dur_aft_drop, na.rm=T))
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Boxplot of the time elapsed (in sec) between drop and the buzz after drop."}
+ggplot(dive3, aes(x=ptt, y=dur_aft_drop, fill=ptt)) +
+  geom_boxplot() +
+  labs(y="Duration (sec)", x="PTT") +
+  theme_tq() +
+  ylim(0,100) +
+  scale_fill_tq() +
+  theme(legend.position="none")
+```
+
+The average duration between a drop and the next buzz varies between 9 (Mara) and 88 (Frida) sec. The maximum duration is 184 sec and the minimum duration 1 sec.
+
+
+
+
+
+
+
+# Number of buzzes during dives with drop {.tabset}
+
+## Buzz before drop
+
+```{r, echo=F}
+dive3[dive3$drop!=0,] %>%
+  group_by(ptt) %>%
+  summarise(mean=mean(Nbuzz_bef, na.rm=T),
+            sd=sd(Nbuzz_bef, na.rm=T),
+            max=max(Nbuzz_bef, na.rm=T),
+            min=min(Nbuzz_bef, na.rm=T))
+```
+
+
+## Buzz after drop
+
+```{r, echo=F}
+dive3[dive3$drop!=0,] %>%
+  group_by(ptt) %>%
+  summarise(mean=mean(Nbuzz_aft, na.rm=T),
+            sd=sd(Nbuzz_aft, na.rm=T),
+            max=max(Nbuzz_aft, na.rm=T),
+            min=min(Nbuzz_aft, na.rm=T))
+```
+
+
+
+
+
+
+
+# Correlation between buzzes and drop {.tabset}
+
+## Dive duration & N buzzes
+
+```{r, echo=F}
+cor.test(dive3$buzz, dive3$dur) 
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Relationship between dive duration (min) and the number of buzzes during dives with drop"}
+ggplot(dive3, aes(buzz, dur)) +
+  labs(x="N buzzes during dive",y="Dive duration (min)") +
+  geom_smooth(method='gam',size=0.6) +
+  facet_wrap(.~ptt, scales="free_x") +
+  geom_point(size=1, colour="brown") +
+  scale_fill_tq() +
+  theme_tq() 
+```
+
+
+
+## Drop & buzzes
+
+```{r, echo=F}
+cor.test(dive3$buzz, dive3$drop) 
+```
+
+
+## Drop depth & drop duration
+
+```{r, echo=F}
+cor.test(dive3$dep_drop, dive3$drop_dur) 
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Relationship between drop duration (min) and drop depth."}
+ggplot(dive3, aes(dep_drop, drop_dur, colour=ptt)) +
+  labs(x="Drop depth (m)",y="Drop duration (min)") +
+  geom_smooth(method='lm',size=0.6) +
+  geom_point(size=1) +
+  scale_fill_tq() +
+  theme_tq() 
+```
+
+
+
+## Drop depth & dive duration
+
+```{r, echo=F}
+cor.test(dive3$dep_drop, dive3$dur) 
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Relationship between drop duration (min) and dive duration (min)."}
+ggplot(dive3, aes(dep_drop, dur, colour=ptt)) +
+  labs(x="Drop depth (m)",y="Dive duration (min)") +
+  geom_smooth(method='lm',size=0.6) +
+  geom_point(size=1) +
+  scale_fill_tq() +
+  theme_tq() 
+```
+
+

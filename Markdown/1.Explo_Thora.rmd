@@ -1,0 +1,954 @@
+---
+title: "Explo Thora data (#7925)"
+author: "Philippine CHAMBAULT"
+date: "25/11/2021"
+output:
+  bookdown::html_document2:
+    number_sections: yes
+    code_folding: show
+    df_print: default
+    fig_caption: yes
+    toc: yes
+    toc_float:
+      collapsed: yes
+      smooth_scroll: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo      = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE,
+  # cache   = FALSE,
+  out.width = "100%"
+  # comment = NA
+)
+```
+
+                       
+
+```{r, global_options, include=FALSE}
+library(ggplot2)
+library(ggbeeswarm)
+library(raincloudplots)
+library(PupillometryR)
+library(gridExtra)
+library(tidyverse)
+library(dplyr)
+library(viridis)
+library(DT)
+library(data.table)
+Sys.setlocale("LC_TIME", "English")
+```
+
+
+
+
+# First steps
+- STP data prefiltering, e.g. order the data, remove data when STP no longer worked, identify and remove outliers
+- identify feeding events based on stomach temp. drop
+- calculate intervals between feeding events (recovery time)
+- number of feeding events/day, any difference between day and night?
+- differentiate between water consumption and prey ingestion (different recovery rates)
+- synchronize the acousonde with the STP tag based on depth of a specific dive, water temp. record....
+- relate drop in stomach temperature to buzz derived from the acousonde
+
+
+# Data
+1 narwhal (Thora, #3962) equiped simultaneously with one __Stomach Temperatrue Pill__ (STP) and one __Acousonde__ (3D accelerometer, acoustic signature, water temperature, depth).
+
+
+
+# STP data
+
+```{r, echo=TRUE}
+stp  <- readRDS("C:/Users/phili/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/Rdata/STP/stp_Thora.RDS")
+
+# Only Argos locations
+table(stp$source)
+
+DT::datatable(stp[1:30,],options=list(scrollX=T)) # sample.int(nrow(stp),100)
+
+# Duration of the STP
+round(difftime(stp$dateTime[nrow(stp)], stp$dateTime[1], units="days")) 
+```
+
+
+
+## Water temperature profile 
+
+```{r, echo=FALSE, fig.height=4, fig.pos="placeHere",fig.cap="Water temperature profile recorded by the STP tag."}
+ggplot(stp[!is.na(stp$depth),], aes(y=-depth, x=water_temp)) +
+  geom_point(size=0.8, aes(color=water_temp)) +
+  scale_colour_viridis() +
+  geom_hline(yintercept=0,linetype=2, color="red", size=0.3)+
+  labs(x="Water temperature (degrees)", y="Depth (m)",title="Thora 2016") +
+  theme(axis.title.y = element_text(size=10,color="black"),
+        axis.title.x = element_text(size=10,color="black"),
+        axis.text.x  = element_text(size=10,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=10,color="black"),
+        panel.background = element_blank(),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"),
+        axis.line.x.top = element_line(size = 3, color = "red"))
+```
+24 records of water temperature.
+
+```{r, echo=TRUE}
+# number of water temperature records:
+nrow(stp[!is.na(stp$water_temp),]) 
+summary(stp$water_temp)
+```
+
+
+
+## Depth profile
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depths recorded when drops in ST detected by the STP tag."}
+ggplot(stp[!is.na(stp$depth),], aes(dateTime, -depth)) +
+  geom_point(size=0.8, aes(colour=type)) +
+  labs(x="", y="Depth (m)",title="Thora 2014") +
+  geom_hline(yintercept=0,linetype=2, color="red", size=0.3)+
+  theme(axis.title.y = element_text(size=10,color="black"),
+        axis.title.x = element_text(size=10,color="black"),
+        axis.text.x  = element_text(size=10,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=10,color="black"),
+        panel.background = element_blank(),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"),
+        axis.line.x.top = element_line(size = 3, color = "red"))
+```
+
+
+
+
+## Type of events detected by the tag {.tabset}
+```{r, echo=FALSE}
+stp$type = as.factor(stp$type)
+lb <- function(x) mean(x,na.rm=T) - sd(x)
+ub <- function(x) mean(x,na.rm=T) + sd(x)
+
+sumld <- stp[!(stp$type=="Feeding Deepest Depth"),c("type","stp")] %>%
+  group_by(type) %>%
+  summarise_all(funs(mean, median, min, max, lower=lb, upper=ub))
+sumld
+```
+Some outliers for upper values (up to 48 deg).
+
+
+### Boxplot of ST by event
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Boxplot of the STP according to the type of event. Stomach Temperature drop to start an ingestion event of	0.6 C/min."}
+ggplot(stp[!is.na(stp$stp) & !(stp$type=="Feeding Deepest Depth"),], aes(y=stp, x=type)) +  
+  geom_point(aes(y=stp, color=type), position="dodge2",size=0.5, alpha=0.8) +
+  geom_boxplot(outlier.shape=NA,lwd=0.4,
+               fatten=2,alpha=0.5,aes(fill=type)) +
+  geom_pointrange(data=sumld, mapping=aes(x=type, y=mean, ymin=upper, ymax=lower, color=type),
+                   width=0.3, size=0.2,position=position_nudge(x=.5, y=0)) +
+  scale_color_brewer(palette="Set2") +
+  scale_fill_brewer(palette="Set2") +
+  labs(x="", y="Stomach temp. (degrees)",title="Thora 2014") +
+  theme(axis.title.y = element_text(size=10,color="black"),
+        axis.title.x = element_text(size=10,color="black"),
+        axis.text.x  = element_text(size=10,vjust=1,hjust=1,angle=45,color="black"),
+        axis.text.y  = element_text(size=10,color="black"),
+        panel.background = element_blank(),
+        legend.title = element_blank(),
+        legend.position="none",
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"))
+```
+
+
+### Histogram of ST by event
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histograms of the STP according to the type of event."}
+ggplot(stp, aes(x=stp)) +
+  geom_density(fill="cornflowerblue") +
+  geom_vline(xintercept=mean(stp$stp,na.rm=T),
+             lwd=0.5, linetype=2, col="red") +
+  facet_wrap(.~type, scales="free_y") +
+  labs(x="STP (degrees)", y="Density") +
+  # geom_text(x=45,  y=0.2, label=mean(stp,na.rm=T), size=2,colour="black") +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.title = element_blank(),
+        strip.text = element_text(colour='black',size=10,margin=margin(0.1,0.1,0.1,0.1,"cm")),
+        strip.background = element_rect(fill="lightgrey", size=0.1),
+        legend.position="none",
+        text=element_text(size=8, family="serif"),
+        title = element_text(size=8, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"))
+```
+No data for category `Feeding Deepest Depth`. Bimodal distributions are observed for `Low Resolution`.
+
+
+
+
+
+
+
+
+
+## ST profiles over time {.tabset}
+
+### 11 Aug 15:35
+```{r, echo=FALSE}
+t     = seq(1,max(stp$min),by=300)
+start = t[1]
+end   = t[1+1]
+dive  = stp[stp$min>=start & stp$min<end,]
+head(dive)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="ST profile over time on 11 Aug 15:35."}
+ggplot(dive[!is.na(dive$stp),], aes(x=dateTime, y=stp)) +
+  geom_line(size=0.5) +
+  geom_point(size=1,aes(colour=stp)) +
+  scale_colour_viridis() +
+  ylim(20,45) +
+  labs(x="", y="Stomach temp. (degrees)", title=paste0(dive$dateTime[1])) +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.title = element_blank(),
+        text=element_text(size=8, family="serif"),
+        title = element_text(size=8, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"))
+```
+Very noisy below 30 degrees, maybe some outliers below 20 degrees.
+
+
+### 12 Aug 04:56
+```{r, echo=FALSE}
+start = t[3]
+end   = t[3+1]
+dive  = stp[stp$min>=start & stp$min<end,]
+head(dive)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="ST profile over time on 12 Aug 04:56."}
+ggplot(dive[!is.na(dive$stp),], aes(x=dateTime, y=stp)) +
+  geom_line(size=0.5) +
+  geom_point(size=1,aes(colour=stp)) +
+  scale_colour_viridis() +
+  ylim(20,45) +
+  labs(x="", y="Stomach temp. (degrees)",
+       title=paste0(dive$dateTime[1])) +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.title = element_blank(),
+        text=element_text(size=8, family="serif"),
+        title = element_text(size=8, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"))
+```
+
+
+
+### 12 Aug 11:34
+```{r, echo=FALSE}
+start = t[5]
+end   = t[5+1]
+dive  = stp[stp$min>=start & stp$min<end,]
+head(dive)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="ST profile over time on 12 Aug 11:34."}
+ggplot(dive[!is.na(dive$stp),], aes(x=dateTime, y=stp)) +
+  geom_line(size=0.5) +
+  geom_point(size=1,aes(colour=stp)) +
+  scale_colour_viridis() +
+  ylim(25,40) +
+  labs(x="", y="Stomach temp. (degrees)",
+       title=paste0(dive$dateTime[1])) +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.title = element_blank(),
+        text=element_text(size=8, family="serif"),
+        title = element_text(size=8, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"))
+```
+
+
+
+
+### 12 Aug 16:35
+```{r, echo=FALSE}
+start = t[6]
+end   = t[6+1]
+dive  = stp[stp$min>=start & stp$min<end,]
+head(dive)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="ST profile over time on 12 Aug 16:35."}
+ggplot(dive[!is.na(dive$stp),], aes(x=dateTime, y=stp)) +
+  geom_line(size=0.5) +
+  geom_point(size=1,aes(colour=stp)) +
+  scale_colour_viridis() +
+  ylim(25,40) +
+  labs(x="", y="Stomach temp. (degrees)",
+       title=paste0(dive$dateTime[1])) +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.title = element_blank(),
+        text=element_text(size=8, family="serif"),
+        title = element_text(size=8, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"))
+```
+
+
+
+
+### 13 Aug 02:59
+```{r, echo=FALSE}
+start = t[8]
+end   = t[8+1]
+dive  = stp[stp$min>=start & stp$min<end,]
+head(dive)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="ST profile over time on 13 Aug 02:59."}
+ggplot(dive[!is.na(dive$stp),], aes(x=dateTime, y=stp)) +
+  geom_line(size=0.5) +
+  geom_point(size=1,aes(colour=stp)) +
+  scale_colour_viridis() +
+  ylim(25,40) +
+  labs(x="", y="Stomach temp. (degrees)",
+       title=paste0(dive$dateTime[1])) +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.title = element_blank(),
+        text=element_text(size=8, family="serif"),
+        title = element_text(size=8, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"))
+```
+
+
+
+### 13 Aug 03:35
+```{r, echo=FALSE}
+start = t[13]
+end   = t[13+1]
+dive  = stp[stp$min>=start & stp$min<end,]
+head(dive)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="ST profile over time on 13 Aug 03:35."}
+ggplot(dive[!is.na(dive$stp),], aes(x=dateTime, y=stp)) +
+  geom_line(size=0.5) +
+  geom_point(size=1,aes(colour=stp)) +
+  scale_colour_viridis() +
+  ylim(25,40) +
+  labs(x="", y="Stomach temp. (degrees)",
+       title=paste0(dive$dateTime[1])) +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.title = element_blank(),
+        text=element_text(size=8, family="serif"),
+        title = element_text(size=8, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"))
+```
+
+
+
+### 14 Aug 13:34
+```{r, echo=FALSE}
+start = t[15]
+end   = t[15+1]
+dive  = stp[stp$min>=start & stp$min<end,]
+head(dive)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="ST profile over time on 14 Aug 13:34."}
+ggplot(dive[!is.na(dive$stp),], aes(x=dateTime, y=stp)) +
+  geom_line(size=0.5) +
+  geom_point(size=1,aes(colour=stp)) +
+  scale_colour_viridis() +
+  ylim(25,40) +
+  labs(x="", y="Stomach temp. (degrees)",
+       title=paste0(dive$dateTime[1])) +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.title = element_blank(),
+        text=element_text(size=8, family="serif"),
+        title = element_text(size=8, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"))
+```
+
+
+
+### 15 Aug 00:18
+```{r, echo=FALSE}
+start = t[17]
+end   = t[17+1]
+dive  = stp[stp$min>=start & stp$min<end,]
+head(dive)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="ST profile over time on 15 Aug 00:18."}
+ggplot(dive[!is.na(dive$stp),], aes(x=dateTime, y=stp)) +
+  geom_line(size=0.5) +
+  geom_point(size=1,aes(colour=stp)) +
+  scale_colour_viridis() +
+  ylim(25,40) +
+  labs(x="", y="Stomach temp. (degrees)",
+       title=paste0(dive$dateTime[1])) +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.title = element_blank(),
+        text=element_text(size=8, family="serif"),
+        title = element_text(size=8, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"))
+```
+
+
+
+
+
+
+
+
+# Acousonde data
+
+```{r, echo=TRUE}
+buzz <- readRDS("C:/Users/phili/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/Rdata/Acousonde/buzz_Thora_phases_2m.RDS")
+DT::datatable(buzz[1:100,],options=list(scrollX=T)) 
+
+# Date of the first buzz after release:
+head(buzz$dateTime[buzz$buzz==1],1) 
+
+# Time elapsed (in days) between release and first buzz:
+round(difftime(buzz$dateTime[buzz$buzz==1][[1]], 
+               buzz$dateTime[1], units="hours"))
+
+# Duration of the acousonde
+round(difftime(buzz$dateTime[nrow(buzz)], buzz$dateTime[1], units="days")) 
+
+# Proportion of phases identified using the diveMove package
+table(buzz$phase) / nrow(buzz) * 100
+
+# number of fives identified (threshold at 2m)
+length(unique(buzz$dive))
+
+# number of clicks identified (threshold at 2m)
+nrow(buzz[buzz$click==1,])
+
+# number of calls identified (threshold at 2m)
+nrow(buzz[buzz$buzz==1,])
+```
+
+
+## Depth profile over time {.tabset}
+
+### Buzzes
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profile of Thora recorded by the acousonde (1 record/sec) with the buzz in red."}
+ggplot(buzz, aes(dateTime, -depth)) +
+  geom_path(size=0.1) + 
+  geom_point(size=0.8,aes(colour=as.factor(buzz))) + 
+  geom_point(size=0.8,data=buzz[buzz$buzz==1,], aes(dateTime,-depth),colour="red") +  
+  scale_colour_manual(values=c("black","red")) +
+  labs(x="", y="Depth (m)",title="Thora 2014 - Buzzes") +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.title = element_blank(),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm")) +
+  guides(color = guide_legend(override.aes = list(size=3)))
+```
+
+
+### Clicks
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profile of Thora recorded by the acousonde with the clicks in blue."}
+ggplot(buzz, aes(dateTime, -depth)) +
+  geom_path(size=0.1) + 
+  geom_point(size=0.8,aes(colour=as.factor(click))) + 
+  geom_point(size=0.8,data=buzz[buzz$click==1,], aes(dateTime,-depth),colour="deepskyblue1") +  
+  scale_colour_manual(values=c("black","deepskyblue1")) +
+  labs(x="", y="Depth (m)",title="Thora 2014 - Clicks") +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.title = element_blank(),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"))+
+  guides(color = guide_legend(override.aes = list(size=3)))
+```
+
+
+
+## Histograms of dive phases {.tabset}
+
+```{r, echo=TRUE}
+stat <- readRDS("C:/Users/phili/Documents/POST-DOC/2021/MSCA-GF/ANALYSES/Rdata/Acousonde/buzz_summary_Thora_2m.RDS")
+DT::datatable(stat[1:10,], options=list(scrollX=T)) 
+```
+
+### Max depth
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histogram of max depth recorded by the acousonde."}
+ggplot(stat, aes(maxdep)) +
+  geom_density(fill="grey") +
+  geom_vline(xintercept=mean(stat$maxdep,na.rm=T), 
+             lwd=0.5, linetype=2, col="red") +
+  labs(x="Max depth \n(m)", y="Density") +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.title = element_blank(),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"))
+```
+mean: 63 m, range: 2-845 m. 9% dives below 300 m and 87% shallower than 100 m. 
+
+```{r, echo=TRUE}
+summary(stat$maxdep)
+# proportion of dives below 300 m
+nrow(stat[stat$maxdep>300,])/nrow(stat)*100
+# proportion of dives above 100 m
+nrow(stat[stat$maxdep<100,])/nrow(stat)*100
+```
+
+
+### Dive duration
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histogram of dive duration recorded by the acousonde."}
+ggplot(stat, aes(divetim/60)) +
+  geom_density(fill="grey") +
+  geom_vline(xintercept=mean(stat$divetim/60,na.rm=T), 
+             lwd=0.5, linetype=2, col="red") +
+  labs(x="Dive duration (min)", y="Density") +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.title = element_blank(),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"))
+```
+mean: 2.3 min, range: 0.01-16.2 min. 14% dives longer than 5 min and 71% shorter than 2 min.
+
+
+```{r, echo=TRUE}
+summary(stat$divetim/60)
+# proportion of dives below 300 m
+nrow(stat[stat$divetim>5*60,])/nrow(stat)*100
+# proportion of dives above 100 m
+nrow(stat[stat$divetim<2*60,])/nrow(stat)*100
+```
+
+
+### Descent time
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histogram of descent time recorded by the acousonde."}
+ggplot(stat, aes(desctim/60)) +
+  geom_density(fill="grey") +
+  geom_vline(xintercept=mean(stat$desctim/60,na.rm=T), 
+             lwd=0.5, linetype=2, col="red") +
+  labs(x="Descent time (min)", y="Density") +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.title = element_blank(),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"))
+```
+mean: 0.89 min, range: 0.008-9.77 min. 79% dives with a descent time shorter than 1 min.
+
+```{r, echo=TRUE}
+summary(stat$desctim/60)
+# proportion of dives with descent interval shorter than 1 min
+nrow(stat[stat$desctim<1*60,])/nrow(stat)*100
+```
+
+
+### Bottom time
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histogram of bottom time recorded by the acousonde."}
+ggplot(stat, aes(botttim/60)) +
+  geom_density(fill="grey") +
+  geom_vline(xintercept=mean(stat$botttim/60,na.rm=T), 
+             lwd=0.5, linetype=2, col="red") +
+  labs(x="Bottom time (min)", y="Density") +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.title = element_blank(),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"))
+```
+mean: 0.58 min, range: 0.01-7.3 min. 90% dives with a bottom time shorter than 2 min.
+
+```{r, echo=TRUE}
+summary(stat$botttim/60)
+# proportion of dives with bottom time shorter than 2 min
+nrow(stat[stat$botttim<2*60,])/nrow(stat)*100
+```
+
+
+### Ascent time
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histogram of ascent time recorded by the acousonde."}
+ggplot(stat, aes(asctim/60)) +
+  geom_density(fill="grey") +
+  geom_vline(xintercept=mean(stat$asctim/60,na.rm=T), 
+             lwd=0.5, linetype=2, col="red") +
+  labs(x="Asecent time (min)", y="Density") +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.title = element_blank(),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"))
+```
+mean: 0.88 min, range: 0.008-8.5 min. 86% dives with a ascent time shorter than 2 min.
+
+```{r, echo=TRUE}
+summary(stat$asctim/60)
+# proportion of dives with asctim time shorter than 2 min
+nrow(stat[stat$asctim<2*60,])/nrow(stat)*100
+```
+
+
+### Postdive time
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histogram of postdive time recorded by the acousonde."}
+ggplot(stat, aes(postdive.dur/60)) +
+  geom_density(fill="grey") +
+  geom_vline(xintercept=mean(stat$postdive.dur/60,na.rm=T), 
+             lwd=0.5, linetype=2, col="red") +
+  labs(x="Postdive time (min)", y="Density") +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.title = element_blank(),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"))
+```
+
+mean: 2.2 min, range: 0-39 min (likely due to ZOC used by Susanna). Some very long postdive intervals likely due to the cut-off at 2 m to identify the dives, so some short and shallow dives might have been merged.
+
+```{r, echo=TRUE}
+summary(stat$postdive.dur/60)
+# proportion of dives with postdive.dur time shorter than 2 min
+nrow(stat[stat$postdive.dur<2*60,])/nrow(stat)*100
+```
+
+
+
+
+## Dive profiles with phases {.tabset}
+
+### 12 Aug 15:32
+```{r, echo=FALSE}
+t = seq(1,length(unique(buzz$dive)),by=20)
+start = t[1]
+end   = t[1+1]
+dive  = buzz[buzz$dive>=start & buzz$dive<end,]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profile over time on 12 Aug 15:32."}
+ggplot(dive, aes(x=dateTime, y=-depth)) +
+  geom_line(size=0.5) +
+  geom_point(size=0.8,aes(colour=phase)) +
+  scale_color_brewer(palette="Set2") +
+  geom_point(data=dive[dive$buzz==1,], size=1.5,colour="red",shape=15) +
+  labs(x="", y="Depth (m)", title=paste0(dive$dateTime[1])) +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.title = element_blank(),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"))+
+  guides(color = guide_legend(override.aes = list(size=3)))
+```
+
+
+
+### 12 Aug 06:11
+```{r, echo=FALSE}
+start = t[10]
+end   = t[10+1]
+dive  = buzz[buzz$dive>=start & buzz$dive<end,]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profile over time on 12 Aug 06:11. Buzzes are red squares."}
+ggplot(dive, aes(x=dateTime, y=-depth)) +
+  geom_line(size=0.5) +
+  geom_point(size=0.8,aes(colour=phase)) +
+  scale_color_brewer(palette="Set2") +
+  geom_point(data=dive[dive$buzz==1,], size=1.5,colour="red",shape=15) +
+  labs(x="", y="Depth (m)", title=paste0(dive$dateTime[1])) +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.title = element_blank(),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"))+
+  guides(color = guide_legend(override.aes = list(size=3)))
+```
+
+
+### 12 Aug 12:53
+```{r, echo=FALSE}
+start = t[15]
+end   = t[15+1]
+dive  = buzz[buzz$dive>=start & buzz$dive<end,]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profile over time on 12 Aug 12:53."}
+ggplot(dive, aes(x=dateTime, y=-depth)) +
+  geom_line(size=0.5) +
+  geom_point(size=0.8,aes(colour=phase)) +
+  scale_color_brewer(palette="Set2") +
+  geom_point(data=dive[dive$buzz==1,], size=1.5,colour="red",shape=15) +
+  labs(x="", y="Depth (m)", title=paste0(dive$dateTime[1])) +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.title = element_blank(),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"))+
+  guides(color = guide_legend(override.aes = list(size=3)))
+```
+
+### 12 Aug 12:53
+```{r, echo=FALSE}
+start = t[18]
+end   = t[18+1]
+dive  = buzz[buzz$dive>=start & buzz$dive<end,]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profile over time on 12 Aug 12:53."}
+ggplot(dive, aes(x=dateTime, y=-depth)) +
+  geom_line(size=0.5) +
+  geom_point(size=0.8,aes(colour=phase)) +
+  scale_color_brewer(palette="Set2") +
+  geom_point(data=dive[dive$buzz==1,], size=1.5,colour="red",shape=15) +
+  labs(x="", y="Depth (m)", title=paste0(dive$dateTime[1])) +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.title = element_blank(),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"))+
+  guides(color = guide_legend(override.aes = list(size=3)))
+```
+
+### 12 Aug 19:00
+```{r, echo=FALSE}
+start = t[20]
+end   = t[20+1]
+dive  = buzz[buzz$dive>=start & buzz$dive<end,]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profile over time on 12 Aug 19:00."}
+ggplot(dive, aes(x=dateTime, y=-depth)) +
+  geom_line(size=0.5) +
+  geom_point(size=0.8,aes(colour=phase)) +
+  scale_color_brewer(palette="Set2") +
+  geom_point(data=dive[dive$buzz==1,], size=1.5,colour="red",shape=15) +
+  labs(x="", y="Depth (m)", title=paste0(dive$dateTime[1])) +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.title = element_blank(),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"))+
+  guides(color = guide_legend(override.aes = list(size=3)))
+```
+
+### 12 Aug 20:45
+```{r, echo=FALSE}
+start = t[21]
+end   = t[21+1]
+dive  = buzz[buzz$dive>=start & buzz$dive<end,]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profile over time on 12 Aug 20:45."}
+ggplot(dive, aes(x=dateTime, y=-depth)) +
+  geom_line(size=0.5) +
+  geom_point(size=0.8,aes(colour=phase)) +
+  scale_color_brewer(palette="Set2") +
+  geom_point(data=dive[dive$buzz==1,], size=1.5,colour="red",shape=15) +
+  labs(x="", y="Depth (m)", title=paste0(dive$dateTime[1])) +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.title = element_blank(),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"))+
+  guides(color = guide_legend(override.aes = list(size=3)))
+```
+
+
+### 13 Aug 05:48
+```{r, echo=FALSE}
+start = t[30]
+end   = t[30+1]
+dive  = buzz[buzz$dive>=start & buzz$dive<end,]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profile over time on 13 Aug 05:48."}
+ggplot(dive, aes(x=dateTime, y=-depth)) +
+  geom_line(size=0.5) +
+  geom_point(size=0.8,aes(colour=phase)) +
+  scale_color_brewer(palette="Set2") +
+  geom_point(data=dive[dive$buzz==1,], size=1.5,colour="red",shape=15) +
+  labs(x="", y="Depth (m)", title=paste0(dive$dateTime[1])) +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.title = element_blank(),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"))+
+  guides(color = guide_legend(override.aes = list(size=3)))
+```
+
+### 13 Aug 15:40
+```{r, echo=FALSE}
+start = t[37]
+end   = t[37+1]
+dive  = buzz[buzz$dive>=start & buzz$dive<end,]
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth profile over time on 13 Aug 15:40."}
+ggplot(dive, aes(x=dateTime, y=-depth)) +
+  geom_line(size=0.5) +
+  geom_point(size=0.8,aes(colour=phase)) +
+  scale_color_brewer(palette="Set2") +
+  geom_point(data=dive[dive$buzz==1,], size=1.5,colour="red",shape=15) +
+  labs(x="", y="Depth (m)", title=paste0(dive$dateTime[1])) +
+  theme(axis.title.y = element_text(size=8,color="black"),
+        axis.title.x = element_text(size=8,color="black"),
+        axis.text.x  = element_text(size=8,vjust=0.5,angle=0,color="black"),
+        axis.text.y  = element_text(size=8,color="black"),
+        panel.background = element_blank(),
+        legend.text=element_text(size=10),
+        legend.title = element_blank(),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"))+
+  guides(color = guide_legend(override.aes = list(size=3)))
+```
+
+
+
+
+
+
+
+
+
+

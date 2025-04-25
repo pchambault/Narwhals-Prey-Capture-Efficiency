@@ -1,0 +1,658 @@
+---
+title: "Exploration of High Resolution STP and TDR data  from #3965"
+author: "Philippine CHAMBAULT"
+date: "07/12/2021"
+output:
+  bookdown::html_document2:
+    number_sections: yes
+    code_folding: show
+    df_print: default
+    fig_caption: yes
+    toc: yes
+    toc_float:
+      collapsed: yes
+      smooth_scroll: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo      = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE,
+  # cache   = FALSE,
+  out.width = "100%"
+  # comment = NA
+)
+```
+
+                       
+
+```{r, global_options, include=FALSE}
+library(ggplot2)
+library(tidyquant)
+library(gridExtra)
+library(tidyverse)
+library(dplyr)
+library(viridis)
+library(DT)
+library(data.table)
+Sys.setlocale("LC_TIME", "English")
+```
+
+
+Objectives:
+
+- Compare the high resolution to the low resolution data for this individual, to assess the ST drops missed.
+
+- Identify sequences of feeding events: start, drop, recovery, end.
+
+
+
+
+
+# Import data {.tabset}
+
+## High resolution
+```{r, echo=TRUE}
+stp  <- readRDS("./Rdata/STP/tdr13_HR_drop_start.RDS")
+DT::datatable(stp[1:30,],options=list(scrollX=T))
+stp = data.frame(stp)
+# number of records
+nrow(stp)
+# Duration of the tag
+round(difftime(stp$dateTime[nrow(stp)], stp$dateTime[1], units="days")) 
+# number of ST drops (when a drop >= 1 deg/min)
+table(stp$event)
+# range values for STP: removed outliers < 10 and > 38 deg
+summary(stp$stp)
+```
+
+
+## STP Low resolution
+```{r, echo=TRUE}
+lr = readRDS("./Rdata/STP/stp_tdr13_LR_clean.RDS")
+DT::datatable(lr[1:30,],options=list(scrollX=T))
+lr = data.frame(lr)
+# number of records
+nrow(lr)
+# number of ST drops (when a drop >= 1 deg/2 min)
+table(lr$type)
+# Duration of the tag
+round(difftime(lr$dateTime[nrow(lr)], stp$dateTime[1], units="days")) 
+# range values for STP: removed outliers < 10 and > 38 deg
+summary(lr$stp)
+```
+
+
+
+
+
+# Depth and STP over time {.tabset}
+
+## High resolution data
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="STP profile over time."}
+ggplot(stp, aes(x=dateTime, y=stp)) +
+  geom_path(size=0.2) +
+  geom_point(size=0.2) +
+  geom_point(size=1, data=stp[stp$event=="drop",], colour="red", shape=15) +
+  labs(x="", y="STP (deg)",title="#3965") +
+  theme_tq()
+```
+Some spikes below 25 deg, could be some outliers.
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="TDR profile for individual #3965 (resolution: 1 sec). Drops in ST are the red dots."}
+ggplot(stp, aes(x=dateTime, y=-depth)) +
+  geom_point(size=0.2) +
+  geom_point(size=1, data=stp[stp$event=="drop",], colour="red", shape=15) +
+  labs(x="", y="Depth (m)",title="#3965") +
+  theme_tq()
+```
+
+
+## Low resolution data
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="TDR profile for individual #3965 (resolution: 2 min). Feeding start are the red dots."}
+ggplot(lr, aes(x=dateTime, y=stp)) +
+  geom_path(size=0.2) +
+  geom_point(size=0.2) +
+  geom_point(size=1, data=lr[lr$type2=="start",], colour="red", shape=15) +
+  labs(x="", y="Depth (m)",title="#3965") +
+  theme_tq()
+```
+
+
+
+
+
+
+
+
+# TDR overlaid on STP based on my method {.tabset}
+Green dots refer to the identification of "drops" based on my method, e.g. cutoff at 1 deg/min. While red and orange dots refer to WC appraoch.
+
+## 2013-08-13 20:43
+
+```{r, echo=FALSE}
+start = stp$dateTime[which(stp$diff_t<(-1))[1]] - (60*2)
+end   = stp$dateTime[which(stp$diff_t<(-1))[1]] + (60*95)
+st    = setDT(stp)[dateTime %between% c(start,end)]
+st    = data.frame(st)
+
+low = setDT(lr)[dateTime %between% c(start, end)]
+low = data.frame(low)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth (top) and STP profiles (bottom) on 2013-08-13 20:43. Green dots are ST drop, red dots ST start and orange dots feeding end."}
+p1 = ggplot(st, aes(dateTime, -depth)) +
+  geom_path(size=0.1) +
+  geom_point(size=1, data=st[st$event=="drop",], colour="green", shape=15) +
+  labs(x="", y="Depth (m)",title="TDR") +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq()
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.2) +
+  ylim(20,38) +
+  geom_point(size=0.2) +
+  geom_point(size=1, data=st[st$event=="drop",], colour="green", shape=15) +
+  geom_point(size=1, data=st[st$event=="start",], colour="red", shape=15) +
+  labs(x="", y="STP (degrees)",title="STP High resolution") +
+  theme_tq()
+
+p3 = ggplot(low[!is.na(low$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.2) +
+  ylim(20,38) +
+  geom_point(size=0.2) +
+  geom_point(size=1, data=low[low$event=="drop",], colour="green", shape=15) +
+  geom_point(size=1, data=low[low$type2=="start",], colour="red", shape=15) +
+  geom_point(size=1, data=low[low$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (deg)",title="STP Low Resolution") +
+  theme_tq()
+
+grid.arrange(p1,p2,p3)
+```
+
+
+
+## 2013-08-14 01:14:00
+
+```{r, echo=FALSE}
+start = stp$dateTime[which(stp$diff_t<(-1))[3]] - (60*2)
+end   = stp$dateTime[which(stp$diff_t<(-1))[3]] + (60*95)
+st    = setDT(stp)[dateTime %between% c(start,end)]
+st    = data.frame(st)
+
+low = setDT(lr)[dateTime %between% c(start, end)]
+low = data.frame(low)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth (top) and STP profiles (bottom) on 2013-08-14 01:14:00. Green dots are ST drop and red dots ST start."}
+p1 = ggplot(st, aes(dateTime, -depth)) +
+  geom_path(size=0.2) +
+  geom_point(size=1, data=st[st$event=="drop",], colour="green", shape=15) +
+  labs(x="", y="Depth (m)",title="TDR") +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq()
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.1) +
+  ylim(20,38) +
+  geom_point(size=0.2) +
+  geom_point(size=1, data=st[st$event=="drop",], colour="green", shape=15) +
+  geom_point(size=1, data=st[st$event=="start",], colour="red", shape=15) +
+  labs(x="", y="STP (degrees)",title="STP High resolution") +
+  theme_tq()
+
+p3 = ggplot(low[!is.na(low$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.2) +
+  ylim(20,38) +
+  geom_point(size=0.2) +
+  geom_point(size=1, data=low[low$event=="drop",], colour="green", shape=15) +
+  geom_point(size=1, data=low[low$type2=="start",], colour="red", shape=15) +
+  geom_point(size=1, data=low[low$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (deg)",title="STP Low Resolution") +
+  theme_tq()
+
+grid.arrange(p1,p2,p3)
+```
+2 drops identified using my method with a cutoff at 1 degree but WC algo only identified one potential drop. The second one might have happened during the recovery time.
+
+
+## 2013-08-14 09:00:00
+
+```{r, echo=FALSE}
+start = stp$dateTime[which(stp$diff_t<(-1))[10]] - (60*2)
+end   = stp$dateTime[which(stp$diff_t<(-1))[10]] + (60*95)
+st    = setDT(stp)[dateTime %between% c(start,end)]
+st    = data.frame(st)
+
+low = setDT(lr)[dateTime %between% c(start, end)]
+low = data.frame(low)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth (top) and STP profiles (bottom) on 2013-08-14 09:00:00. Green dots are ST drop and red dots ST start."}
+p1 = ggplot(st, aes(dateTime, -depth)) +
+  geom_path(size=0.2) +
+  geom_point(size=1, data=st[st$event=="drop",], colour="green", shape=15) +
+  labs(x="", y="Depth (m)",title="TDR") +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq()
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.1) +
+  ylim(20,38) +
+  geom_point(size=0.2) +
+  geom_point(size=1, data=st[st$event=="drop",], colour="green", shape=15) +
+  geom_point(size=1, data=st[st$event=="start",], colour="red", shape=15) +
+  labs(x="", y="STP (degrees)",title="STP High resolution") +
+  theme_tq()
+
+p3 = ggplot(low[!is.na(low$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.2) +
+  ylim(20,38) +
+  geom_point(size=0.2) +
+  geom_point(size=1, data=low[low$event=="drop",], colour="green", shape=15) +
+  geom_point(size=1, data=low[low$type2=="start",], colour="red", shape=15) +
+  geom_point(size=1, data=low[low$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (deg)",title="STP Low Resolution") +
+  theme_tq()
+
+grid.arrange(p1,p2,p3)
+```
+
+The first drop identified by WC occurred at the surface and could be due to water ingestion.
+The third drop recorded by the LR dataset (bottom) seems to be an error (constant ST). Otherwise preety goof match between low and high resolution datasets.
+
+
+
+## 2013-08-15 01:57:00
+
+```{r, echo=FALSE}
+start = stp$dateTime[which(stp$diff_t<(-1))[20]] - (60*2)
+end   = stp$dateTime[which(stp$diff_t<(-1))[20]] + (60*95)
+st    = setDT(stp)[dateTime %between% c(start,end)]
+st    = data.frame(st)
+
+low = setDT(lr)[dateTime %between% c(start, end)]
+low = data.frame(low)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth (top) and STP profiles (bottom) on 2013-08-15 01:57:00. Green dots are ST drop and red dots ST start."}
+p1 = ggplot(st, aes(dateTime, -depth)) +
+  geom_path(size=0.2) +
+  geom_point(size=1, data=st[st$event=="drop",], colour="green", shape=15) +
+  labs(x="", y="Depth (m)",title="TDR") +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq()
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.1) +
+  ylim(20,38) +
+  geom_point(size=0.2) +
+  geom_point(size=1, data=st[st$event=="drop",], colour="green", shape=15) +
+  geom_point(size=1, data=st[st$event=="start",], colour="red", shape=15) +
+  labs(x="", y="STP (degrees)",title="STP High resolution") +
+  theme_tq()
+
+p3 = ggplot(low[!is.na(low$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.2) +
+  ylim(20,38) +
+  geom_point(size=0.2) +
+  geom_point(size=1, data=low[low$event=="drop",], colour="green", shape=15) +
+  geom_point(size=1, data=low[low$type2=="start",], colour="red", shape=15) +
+  geom_point(size=1, data=low[low$type2=="end",], colour="orange", shape=15) +
+  # geom_point(size=1, data=low[low$type2=="start",], colour="red", shape=15) +
+  labs(x="", y="STP (deg)",title="STP Low Resolution") +
+  theme_tq()
+
+grid.arrange(p1,p2,p3)
+```
+
+Several drops identified by me (cutoff at 1 deg/min), but good start and end by WC algo (bottom). The 1 degree cutoff might be not optimal for some specific cases; should we rely on WC algo instead?
+
+
+## 2013-08-16 12:18:00
+
+```{r, echo=FALSE}
+start = stp$dateTime[which(stp$diff_t<(-1))[50]] - (60*2)
+end   = stp$dateTime[which(stp$diff_t<(-1))[50]] + (60*95)
+st    = setDT(stp)[dateTime %between% c(start,end)]
+st    = data.frame(st)
+
+low = setDT(lr)[dateTime %between% c(start, end)]
+low = data.frame(low)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth (top) and STP profiles (bottom) on 2013-08-16 12:18:00. Green dots are ST drop and red dots ST start."}
+p1 = ggplot(st, aes(dateTime, -depth)) +
+  geom_path(size=0.2) +
+  geom_point(size=1, data=st[st$event=="drop",], colour="green", shape=15) +
+  labs(x="", y="Depth (m)",title="TDR") +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq()
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.1) +
+  ylim(20,38) +
+  geom_point(size=0.2) +
+  geom_point(size=1, data=st[st$event=="drop",], colour="green", shape=15) +
+  geom_point(size=1, data=st[st$event=="start",], colour="red", shape=15) +
+  labs(x="", y="STP (degrees)",title="STP High resolution") +
+  theme_tq()
+
+p3 = ggplot(low[!is.na(low$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.2) +
+  ylim(20,38) +
+  geom_point(size=0.2) +
+  geom_point(size=1, data=low[low$event=="drop",], colour="green", shape=15) +
+  geom_point(size=1, data=low[low$type2=="start",], colour="red", shape=15) +
+  geom_point(size=1, data=low[low$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (deg)",title="STP Low Resolution") +
+  theme_tq()
+
+grid.arrange(p1,p2,p3)
+```
+
+he first drop occurred at the surface and was very quick in terms of recovery (not even identified by WC algo), might be a water ingestion. Same quetsion for the second drop.
+
+
+
+## 2013-08-17 02:18:00
+
+```{r, echo=FALSE}
+length(which(stp$diff_t<(-1)))
+start = stp$dateTime[which(stp$diff_t<(-1))[60]] - (60*2)
+end   = stp$dateTime[which(stp$diff_t<(-1))[60]] + (60*95)
+st    = setDT(stp)[dateTime %between% c(start,end)]
+st    = data.frame(st)
+
+low = setDT(lr)[dateTime %between% c(start, end)]
+low = data.frame(low)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth (top) and STP profiles (bottom) on 2013-08-17 02:18:00. Green dots are ST drop and red dots ST start."}
+p1 = ggplot(st, aes(dateTime, -depth)) +
+  geom_path(size=0.2) +
+  geom_point(size=1, data=st[st$event=="drop",], colour="green", shape=15) +
+  labs(x="", y="Depth (m)",title="TDR") +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq()
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.1) +
+  ylim(20,38) +
+  geom_point(size=0.2) +
+  geom_point(size=1, data=st[st$event=="drop",], colour="green", shape=15) +
+  geom_point(size=1, data=st[st$event=="start",], colour="red", shape=15) +
+  labs(x="", y="STP (degrees)",title="STP High resolution") +
+  theme_tq()
+
+p3 = ggplot(low[!is.na(low$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.2) +
+  ylim(20,38) +
+  geom_point(size=0.2) +
+  geom_point(size=1, data=low[low$event=="drop",], colour="green", shape=15) +
+  geom_point(size=1, data=low[low$type2=="start",], colour="red", shape=15) +
+  geom_point(size=1, data=low[low$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (deg)",title="STP Low Resolution") +
+  theme_tq()
+
+grid.arrange(p1,p2,p3)
+```
+Water ingestion close to the surface?
+
+
+## 2013-08-18 04:03:00
+
+```{r, echo=FALSE}
+start = stp$dateTime[which(stp$diff_t<(-1))[70]] - (60*2)
+end   = stp$dateTime[which(stp$diff_t<(-1))[70]] + (60*95)
+st    = setDT(stp)[dateTime %between% c(start,end)]
+st    = data.frame(st)
+
+low = setDT(lr)[dateTime %between% c(start, end)]
+low = data.frame(low)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth (top) and STP profiles (bottom) on 2013-08-18 04:03:00. Green dots are ST drop and red dots ST start."}
+p1 = ggplot(st, aes(dateTime, -depth)) +
+  geom_path(size=0.2) +
+  geom_point(size=1, data=st[st$event=="drop",], colour="green", shape=15) +
+  labs(x="", y="Depth (m)",title="TDR") +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq()
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.1) +
+  ylim(20,38) +
+  geom_point(size=0.2) +
+  geom_point(size=1, data=st[st$event=="drop",], colour="green", shape=15) +
+  geom_point(size=1, data=st[st$event=="start",], colour="red", shape=15) +
+  labs(x="", y="STP (degrees)",title="STP High resolution") +
+  theme_tq()
+
+p3 = ggplot(low[!is.na(low$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.2) +
+  ylim(20,38) +
+  geom_point(size=0.2) +
+  geom_point(size=1, data=low[low$event=="drop",], colour="green", shape=15) +
+  geom_point(size=1, data=low[low$type2=="start",], colour="red", shape=15) +
+  geom_point(size=1, data=low[low$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (deg)",title="STP Low Resolution") +
+  theme_tq()
+
+grid.arrange(p1,p2,p3)
+```
+No "end" point for the LR dataset (bottom) for the first drop.
+
+## 2013-08-19 04:33/00
+
+```{r, echo=FALSE}
+start = stp$dateTime[which(stp$diff_t<(-1))[80]] - (60*2)
+end   = stp$dateTime[which(stp$diff_t<(-1))[80]] + (60*95)
+st    = setDT(stp)[dateTime %between% c(start,end)]
+st    = data.frame(st)
+
+low = setDT(lr)[dateTime %between% c(start, end)]
+low = data.frame(low)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth (top) and STP profiles (bottom) on 2013-08-19 04:32:36. Green dots are ST drop and red dots ST start."}
+p1 = ggplot(st, aes(dateTime, -depth)) +
+  geom_path(size=0.2) +
+  geom_point(size=1, data=st[st$event=="drop",], colour="green", shape=15) +
+  labs(x="", y="Depth (m)",title="TDR") +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq()
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.1) +
+  ylim(20,38) +
+  geom_point(size=0.2) +
+  geom_point(size=1, data=st[st$event=="drop",], colour="green", shape=15) +
+  geom_point(size=1, data=st[st$event=="start",], colour="red", shape=15) +
+  labs(x="", y="STP (degrees)",title="STP High resolution") +
+  theme_tq()
+
+p3 = ggplot(low[!is.na(low$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.2) +
+  ylim(20,38) +
+  geom_point(size=0.2) +
+  geom_point(size=1, data=low[low$event=="drop",], colour="green", shape=15) +
+  geom_point(size=1, data=low[low$type2=="start",], colour="red", shape=15) +
+  geom_point(size=1, data=low[low$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (deg)",title="STP Low Resolution") +
+  theme_tq()
+
+grid.arrange(p1,p2,p3)
+```
+
+Long recovery time. Good match between low and high resolution datasets, but the end time from WC might be too early when comparing to the ST curve from the high resolution data.
+
+
+## 2013-08-20 05:48:00
+
+```{r, echo=FALSE}
+start = stp$dateTime[which(stp$diff_t<(-1))[90]] - (60*2)
+end   = stp$dateTime[which(stp$diff_t<(-1))[90]] + (60*95)
+st    = setDT(stp)[dateTime %between% c(start,end)]
+st    = data.frame(st)
+
+low = setDT(lr)[dateTime %between% c(start, end)]
+low = data.frame(low)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth (top) and STP profiles (bottom) on 2013-08-20 05:48:00. Green dots are ST drop and red dots ST start."}
+p1 = ggplot(st, aes(dateTime, -depth)) +
+  geom_path(size=0.2) +
+  geom_point(size=1, data=st[st$event=="drop",], colour="green", shape=15) +
+  labs(x="", y="Depth (m)",title="TDR") +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq()
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.1) +
+  ylim(20,38) +
+  geom_point(size=0.2) +
+  geom_point(size=1, data=st[st$event=="drop",], colour="green", shape=15) +
+  geom_point(size=1, data=st[st$event=="start",], colour="red", shape=15) +
+  labs(x="", y="STP (degrees)",title="STP High resolution") +
+  theme_tq()
+
+p3 = ggplot(low[!is.na(low$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.2) +
+  ylim(20,38) +
+  geom_point(size=0.2) +
+  geom_point(size=1, data=low[low$event=="drop",], colour="green", shape=15) +
+  geom_point(size=1, data=low[low$type2=="start",], colour="red", shape=15) +
+  geom_point(size=1, data=low[low$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (deg)",title="STP Low Resolution") +
+  theme_tq()
+
+grid.arrange(p1,p2,p3)
+```
+The drops that I identified are wrong here but WC algo worked well. Probably one single event during this specific deep dive (>400 m).
+
+
+## 2013-08-20 18:30:00 
+
+```{r, echo=FALSE}
+start = stp$dateTime[which(stp$diff_t<(-1))[100]] - (60*2)
+end   = stp$dateTime[which(stp$diff_t<(-1))[100]] + (60*95)
+st    = setDT(stp)[dateTime %between% c(start,end)]
+st    = data.frame(st)
+
+low = setDT(lr)[dateTime %between% c(start, end)]
+low = data.frame(low)
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Depth (top) and STP profiles (bottom) on 2013-08-20 18:30:00. Green dots are ST drop and red dots ST start."}
+p1 = ggplot(st, aes(dateTime, -depth)) +
+  geom_path(size=0.2) +
+  geom_point(size=1, data=st[st$event=="drop",], colour="green", shape=15) +
+  labs(x="", y="Depth (m)",title="TDR") +
+  geom_hline(yintercept=0,linetype=2, color="blue", size=0.3) +
+  theme_tq()
+
+p2 = ggplot(st[!is.na(st$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.1) +
+  ylim(20,38) +
+  geom_point(size=0.2) +
+  geom_point(size=1, data=st[st$event=="drop",], colour="green", shape=15) +
+  geom_point(size=1, data=st[st$event=="start",], colour="red", shape=15) +
+  labs(x="", y="STP (degrees)",title="STP High resolution") +
+  theme_tq()
+
+p3 = ggplot(low[!is.na(low$stp),], aes(dateTime, stp)) +
+  geom_path(size=0.2) +
+  ylim(20,38) +
+  geom_point(size=0.2) +
+  geom_point(size=1, data=low[low$event=="drop",], colour="green", shape=15) +
+  geom_point(size=1, data=low[low$type2=="start",], colour="red", shape=15) +
+  geom_point(size=1, data=low[low$type2=="end",], colour="orange", shape=15) +
+  labs(x="", y="STP (deg)",title="STP Low Resolution") +
+  theme_tq()
+
+grid.arrange(p1,p2,p3)
+```
+Possible water ingestion for the second drop identified by the high resolution dataset (detected close to the surface).
+
+
+
+
+
+# Compare depth between HR and LR {.tabset}
+```{r, echo=FALSE}
+stp2 = readRDS("./Rdata/STP/stp2_tdr13_LR_with_type.RDS")
+cor.test(stp2$depth.y, stp2$depth.x)   # 0.99
+head(stp2[!is.na(stp2$depth.y),])
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Correlation between depth recorded from LR and the ones from HR."}
+ggplot(stp2, aes(x=depth.x, y=depth.y)) +
+  labs(x="Depth from HR (m)",y="Depth from LR (m)",title="#3965") +
+  geom_smooth(method=lm,size=0.6) +
+  geom_point(size=2, colour="brown") +
+  theme_tq()
+```
+
+
+
+
+
+
+
+
+# Compare ST between feeding and no feeding {.tabset}
+
+## Low Resolution
+```{r, echo=FALSE}
+# number of daily events
+as.numeric(table(lr$type2)[1]) / 8
+kruskal.test(stp~feed, lr) 
+# average ST during no feeding
+mean(lr$stp[lr$feed=="no feeding"],na.rm=T)  
+# average ST during feeding
+mean(lr$stp[lr$feed=="feeding"],na.rm=T)      
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Boxplot of the ST according to the state (feeding vs. no feeding) identified by WC algorithm."}
+ggplot(lr[!is.na(lr$stp),], aes(x=feed, y=stp)) +
+  geom_boxplot(aes(colour=feed)) + 
+  ylim(20,38) +
+  labs(x="", y="STP (degrees)",title="#3965") +
+  scale_color_tq() +
+  theme_tq()
+```
+
+
+
+## High Resolution
+```{r, echo=FALSE}
+# number of daily events
+as.numeric(table(stp2$type2)[1]) / 8
+kruskal.test(stp~feed, stp2) 
+# average ST during no feeding
+mean(stp2$stp[stp2$feed=="no feeding"],na.rm=T)  
+# average ST during feeding
+mean(stp2$stp[stp2$feed=="feeding"],na.rm=T)      
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Boxplot of the ST according to the state (feeding vs. no feeding) identified by WC algorithm for the HR dataset."}
+ggplot(stp2[!is.na(stp2$stp),], aes(x=feed, y=stp)) +
+  geom_boxplot(aes(colour=feed)) + 
+  ylim(20,38) +
+  labs(x="", y="STP (degrees)",title="#3965") +
+  scale_color_tq() +
+  theme_tq()
+```
+
+
+
+
+<!-- ## Duration of feeding events (between start and end) -->
+<!-- ```{r, echo=FALSE} -->
+
+<!-- ``` -->
