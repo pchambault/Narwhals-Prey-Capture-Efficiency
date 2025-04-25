@@ -1,0 +1,290 @@
+---
+title: "Events from STPs after correction (n=7)"
+author: "Philippine Chambault"
+date: "12/29/2021"
+output:
+  bookdown::html_document2:
+    number_sections: yes
+    code_folding: show
+    df_print: default
+    fig_caption: yes
+    toc: yes
+    toc_float:
+      collapsed: yes
+      smooth_scroll: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo      = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE,
+  # cache   = FALSE,
+  out.width = "100%"
+  # comment = NA
+)
+```
+
+                       
+
+```{r, global_options, include=FALSE}
+library(ggplot2)
+library(tidyquant)
+library(gridExtra)
+library(tidyverse)
+library(dplyr)
+library(viridis)
+library(DT)
+library(data.table)
+Sys.setlocale("LC_TIME", "English")
+```
+
+
+
+# Import data {.tabset}
+
+```{r, echo=F}
+setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES")
+stp  <- readRDS("./Rdata/STP/3.STP_clean_7ids.RDS")
+DT::datatable(stp[1:30,],options=list(scrollX=T))
+stp = data.frame(stp)
+
+# number of records
+nrow(stp)
+
+# number of individuals
+length(unique(stp$ptt))
+
+# number of ST start & end: more starts than end !
+table(stp$type2)
+
+# range values for STP: removed outliers < 10 and > 38 deg
+summary(stp$stp)
+
+# start and end date for each ID
+dat = stp[,c("ptt","dateTime","stp")] %>%
+    group_by(ptt) %>%
+    summarise(start=head(dateTime,1),
+              end=tail(dateTime,1),
+              nrow=n())
+dat$duration = difftime(dat$end, dat$start,units="days")
+
+# number of records and ST drops/ID
+feed = stp[,c("ptt","dateTime","stp","feed","type2")] %>%
+  group_by(ptt,type2) %>%
+  summarise(STdrop=n())
+feed = feed[feed$type2=="start",]
+dat  = merge(dat, feed[,c("ptt","STdrop")],by="ptt")
+
+# number of daily ST drops/ID
+dat$daily_drop = dat$STdrop / as.numeric(dat$duration)
+dat = dat[order(dat$daily_drop),]
+dat
+```
+
+
+
+# ST profile over time
+```{r, echo=F}
+stp %>%
+  group_by(ptt) %>%
+  summarise(counts_start=table(type2)[4],
+            counts_end=table(type2)[1])
+
+stp$days = stp$days - 1
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="ST profiles over time. Red dots refer to feeding start."}
+ggplot(stp[!is.na(stp$stp),], aes(x=dateTime, y=stp)) +
+  geom_point(size=0.2) + 
+  geom_point(data=stp[stp$type2=="start",], colour="red",shape=15) +
+  geom_path() +
+  labs(x="", y="STP (degrees)") +
+  facet_wrap(~ptt, ncol=4, scales="free_x") +
+  theme_tq() +
+  theme(axis.title.y = element_text(size=10,color="black"),
+        axis.title.x = element_text(size=10,color="black"),
+        axis.text.x  = element_text(size=10,vjust=0.5,angle=90,color="black"),
+        axis.text.y  = element_text(size=10,color="black"),
+        panel.background = element_blank(),
+        text=element_text(size=10, family="serif"),
+        title = element_text(size=10, face='bold'),
+        panel.grid.major = element_line(colour="lightgrey", size=0.1),
+        plot.margin = unit(c(0.2,0.2,0.2,0.1), "cm"),
+        axis.line.x.top = element_line(size = 3, color = "red"))
+```
+
+
+
+
+# STP duration
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="STP duration (in days) per individual."}
+ggplot(stp[!is.na(stp$stp),], aes(y=days, x=ptt, colour=ptt)) +
+  geom_line(size=2) + 
+  scale_y_continuous(name="Days", breaks=seq(0,max(stp$days,by=1))) +
+  scale_color_tq() +
+  labs(x="", y="Days") +
+  coord_flip() +
+  theme_tq() +
+  theme(legend.position="none")
+```
+
+
+# Number of ST drops per individual
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histogram of the number of ST drops per individual over the entire recording period."}
+ggplot(dat, aes(y=STdrop, x=reorder(ptt,STdrop), fill=ptt)) +
+  geom_bar(stat="identity") + 
+  labs(x="ID", y="Number of ST drops") +
+  geom_text(aes(label=dat$STdrop), vjust=0, size=4) +
+  scale_fill_tq() +
+  theme_tq() +
+  theme(legend.position="none")
+```
+
+
+
+# Number of daily ST drops per individual
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histogram of the number of daily ST drops per individual."}
+ggplot(dat, aes(y=daily_drop, x=reorder(ptt,daily_drop), fill=ptt)) +
+  geom_bar(stat="identity") + 
+  labs(x="ID", y="Number of daily ST drops") +
+  geom_text(aes(label=round(dat$daily_drop)), vjust=0, size=4) +
+  scale_fill_tq() +
+  theme_tq() +
+  theme(legend.position="none")
+```
+Lots of daily drops for Mara but some might be located close to surface and not associated with feeding.
+
+
+
+
+
+
+
+
+# Boxplot of ST during feeding vs. no feeding
+
+```{r, echo=F}
+stp$feed = factor(stp$feed, levels=c("no feeding","feeding"))
+
+# average ST during feeding and no feeding
+stp %>%
+  group_by(ptt,feed) %>%
+  summarize(mean=mean(stp,na.rm=T),
+            sd=sd(stp,na.rm=T))
+
+# kruskal Wallis test between feeding and no feeding
+kruskal.test(stp$stp, stp$feed)
+
+mean(stp$stp[stp$feed=="feeding"])
+mean(stp$stp[stp$feed=="no feeding"])
+```
+ST is differs significantly between feeding and no feeding events (p<0.001). 
+Average ST during feeding event: 32.0 degrees.
+Average ST during no feeding event: 35.7 degrees.
+
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histogram of the number of daily ST drops per individual."}
+ggplot(stp, aes(y=stp, x=ptt, fill=feed)) +
+  geom_boxplot() +  
+  labs(x="ID", y="STP (deg)") +
+  scale_fill_tq() +
+  theme_tq() 
+```
+
+Some remaining outliers for "Frida, Mara and Thora."no feeding" events, need to clean that.
+
+
+
+
+# Boxplot of depth during ST drops
+
+```{r, echo=F}
+setwd("/Users/philippinechambault/Documents/POST-DOC/2021/MSCA-GF/ANALYSES")
+event  <- readRDS("./Rdata/STP/3.Events_start_stop_7ids.RDS")
+
+stp = data.frame(stp)
+stp %>%
+  group_by(ptt) %>%
+  summarize(mean=mean(depth,na.rm=T),
+            sd=sd(depth,na.rm=T),
+            min=min(depth,na.rm=T),
+            max=max(depth,na.rm=T),)
+
+mean(stp$depth[!is.na(stp$depth)])
+sd(stp$stp[!is.na(stp$depth)])
+
+# proportion of ST drops less then 10 m deep
+nrow(stp[stp$depth<10 & !is.na(stp$depth),]) / nrow(stp) * 100
+# proportion of ST drops less then 5 m deep
+nrow(stp[stp$depth<5 & !is.na(stp$depth),]) / nrow(stp) * 100
+# proportion of ST drops at 0 m deep
+nrow(stp[stp$depth==0 & !is.na(stp$depth),]) / nrow(stp) * 100
+```
+Proportion of ST drops < 10 m deep: 0.55%.
+
+Proportion of ST drops < 5 m deep: 0.43%.
+
+Proportion of ST drops at surface (depth=0): 0.13%.
+
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Histogram of the number of daily ST drops per individual."}
+ggplot(stp[!is.na(stp$depth),], aes(y=-depth, x=ptt, fill=ptt)) +
+  geom_boxplot() + 
+  labs(x="ID", y="STP (deg)") +
+  scale_fill_tq() +
+  theme_tq()  +
+  theme(legend.position="none")
+```
+Few dives up to 1000 m for Mara, is that possible?
+
+
+# Duration of ST events (in min)
+```{r, echo=F}
+DT::datatable(stp[1:10,],options=list(scrollX=T))
+
+event %>%
+  group_by(ptt) %>%
+  summarise(min_dur=min(dur),
+            max_dur=max(dur),
+            mean_dur=mean(dur),
+            sd_dur=sd(dur))
+```
+The max duration is pretty high for some individuals (275 min for #7618-15, more than 5h to recover from feeding), but the average durations are similar to the published paper in 2014. The very short durations might be water ingestion, need to check if the events occur at the surface to confirm that.
+
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Duration of the ST events (in min) per individual."}
+ggplot(event, aes(x=ptt, y=dur, fill=ptt)) +
+  geom_boxplot() + 
+  # ylim(0,60) +
+  labs(x="", y="Event duration (min)") +
+  scale_fill_tq() +
+  theme_tq()  +
+  theme(legend.position="none")
+```
+
+
+
+
+# Inter-event duration (in h)
+```{r, echo=F}
+event %>%
+  group_by(ptt) %>%
+  summarise(min_dur=min(dur_nofeed/60, na.rm=T),
+            max_dur=max(dur_nofeed/60, na.rm=T),
+            mean_dur=mean(dur_nofeed/60, na.rm=T))
+```
+
+```{r, echo=FALSE, fig.pos="placeHere", fig.height=4, fig.cap="Duration of the inter-feeding events (in min) per individual."}
+ggplot(event, aes(x=ptt, y=dur_nofeed/60, fill=ptt)) +
+  geom_boxplot() + 
+  # ylim(0,80) +
+  labs(x="", y="Inter-event duration (h)") +
+  scale_fill_tq() +
+  theme_tq()  +
+  theme(legend.position="none")
+```
